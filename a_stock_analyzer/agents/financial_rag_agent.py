@@ -1,0 +1,117 @@
+"""Financial RAG sub-agent for deep report analysis."""
+
+import logging
+from typing import Any, Optional
+
+from a_stock_analyzer.config.settings import get_settings
+from a_stock_analyzer.core.agent import ReActAgent
+from a_stock_analyzer.core.base import AgentContext, BaseSkill
+from a_stock_analyzer.core.message import AgentMessage
+from a_stock_analyzer.rag.pipeline import RAGPipeline
+from a_stock_analyzer.tools.akshare_data import AKShareTool
+from a_stock_analyzer.tools.web_search import WebSearchTool
+
+logger = logging.getLogger(__name__)
+
+
+class FinancialRAGAgent(ReActAgent):
+    """Sub-agent for financial report RAG analysis.
+
+    Provides deep financial analysis using RAG on company reports.
+    """
+
+    def __init__(
+        self,
+        name: str = "financial_rag",
+        tools: Optional[list] = None,
+        skills: Optional[list[BaseSkill]] = None,
+        model: Optional[str] = None,
+    ):
+        cfg = get_settings().agents.financial_rag
+        super().__init__(
+            name=name,
+            system_prompt=cfg.system_prompt,
+            tools=tools or [AKShareTool(), WebSearchTool()],
+            skills=skills,
+            model=model or cfg.model,
+        )
+        self.rag_pipeline = RAGPipeline()
+
+    async def run(
+        self,
+        user_input: str,
+        context: Optional[AgentContext] = None,
+    ) -> AgentMessage:
+        """Run financial RAG analysis."""
+        logger.info(f"FinancialRAGAgent analyzing: {user_input[:100]}...")
+
+        # Try RAG first if reports are indexed
+        rag_result = None
+        try:
+            if self.rag_pipeline.retriever.count().get("vector_store", 0) > 0:
+                rag_result = await self.rag_pipeline.query_and_answer(
+                    query=user_input,
+                    top_k=5,
+                )
+        except Exception as e:
+            logger.warning(f"RAG query failed: {e}")
+
+        # Combine RAG results with market data
+        data_parts = []
+
+        if rag_result and rag_result.get("answer"):
+            data_parts.append(f"财报RAG分析结果:\n{rag_result['answer']}")
+
+        # Get financial data from AKShare
+        akshare = AKShareTool()
+        try:
+            # Try to extract stock symbol from input
+            import re
+            symbol_match = re.search(r'(\d{6})', user_input)
+            if symbol_match:
+                symbol = symbol_match.group(1)
+                financial_data = await akshare.execute(
+                    data_type="stock_financial",
+                    symbol=symbol,
+                )
+                data_parts.append(f"财务数据:\n{str(financial_data)[:1500]}")
+        except Exception as e:
+            logger.warning(f"Failed to get financial data: {e}")
+
+        combined_input = f"""{user_input}
+
+{"\n\n".join(data_parts)}
+
+请基于以上信息，提供详细的财务分析。分析维度包括：
+1. 盈利能力分析
+2. 偿债能力分析
+3. 运营效率分析
+4. 成长性分析
+5. 现金流质量
+6. 综合评价与投资建议"""
+
+        result = await super().run(combined_input, context)
+
+        if isinstance(result.content, dict):
+            result.content["summary"] = self._format_summary(
+                result.content.get("answer", ""),
+                rag_result,
+            )
+
+        return result
+
+    def _format_summary(self, analysis: str, rag_result: Optional[dict] = None) -> str:
+        """Format analysis into structured summary."""
+        sources = ""
+        if rag_result and rag_result.get("sources"):
+            sources = f"\n\n**参考来源**: {', '.join(rag_result['sources'])}"
+
+        return f"""## 财报深度分析摘要
+
+{analysis[:3000]}
+
+{sources}
+
+---
+*数据来源: 财报RAG + AKShare财务数据*
+"""

@@ -1,0 +1,22 @@
+{
+  "name": "RAG Retrieval Benchmark",
+  "description": "Benchmark for RAG retrieval quality",
+  "version": "0.1.0",
+  "test_cases": [
+    {
+      "id": "rag_001",
+      "query": "公司2023年营业收入是多少？",
+      "relevant_docs": ["doc_revenue_2023"]
+    },
+    {
+      "id": "rag_002",
+      "query": "净利润增长率如何？",
+      "relevant_docs": ["doc_profit_growth"]
+    },
+    {
+      "id": "rag_003",
+      "query": "公司主要业务是什么？",
+      "relevant_docs": ["doc_business_overview"]
+    }
+  ]
+}
