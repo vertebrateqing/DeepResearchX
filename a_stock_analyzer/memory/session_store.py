@@ -31,16 +31,36 @@ class SessionStore:
         session.updated_at = datetime.now()
         json_path, md_path = self._get_paths(session.session_id)
 
+        # Clean data to avoid Unicode surrogate errors
+        data = session.to_dict()
+        data = self._sanitize_for_json(data)
+
         # Save JSON
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(session.to_dict(), f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
         # Save Markdown
         md_content = self._to_markdown(session)
+        md_content = self._sanitize_text(md_content)
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(md_content)
 
         logger.debug(f"Saved session {session.session_id}")
+
+    def _sanitize_for_json(self, obj: Any) -> Any:
+        """Recursively sanitize data for JSON serialization."""
+        if isinstance(obj, dict):
+            return {k: self._sanitize_for_json(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._sanitize_for_json(v) for v in obj]
+        elif isinstance(obj, str):
+            return self._sanitize_text(obj)
+        return obj
+
+    def _sanitize_text(self, text: str) -> str:
+        """Remove invalid Unicode surrogate characters from text."""
+        # Remove surrogate pairs and other invalid characters
+        return text.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
 
     def load(self, session_id: str) -> SessionMemory | None:
         """Load session from JSON."""

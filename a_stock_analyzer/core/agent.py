@@ -266,6 +266,8 @@ class ReActAgent(BaseAgent):
             else:
                 # No tool calls - this is the final answer
                 final_answer = message.get("content", "")
+                # Sanitize to remove invalid Unicode surrogates
+                final_answer = final_answer.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
                 break
 
         # Generate summary for parent agent
@@ -308,7 +310,9 @@ class ReActAgent(BaseAgent):
         """Simple LLM call without tool use."""
         messages = self._build_messages(user_input)
         response = await self.llm.chat(messages=messages, model=self.model)
-        return response["choices"][0]["message"].get("content", "")
+        content = response["choices"][0]["message"].get("content", "")
+        # Sanitize to remove invalid Unicode surrogates
+        return content.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
 
 
 class SimpleAgent(BaseAgent):

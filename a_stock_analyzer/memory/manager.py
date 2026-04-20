@@ -112,12 +112,17 @@ class MemoryManager:
 
     # --- Conversation ---
 
+    @staticmethod
+    def _sanitize(text: str) -> str:
+        """Remove invalid Unicode surrogate characters."""
+        return text.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+
     def add_user_message(self, content: str, metadata: dict[str, Any] | None = None) -> None:
         """Record a user message."""
         self.session.conversation_history.append(
             ConversationTurn(
                 role="user",
-                content=content,
+                content=self._sanitize(content),
                 metadata=metadata or {},
             )
         )
@@ -127,7 +132,7 @@ class MemoryManager:
         self.session.conversation_history.append(
             ConversationTurn(
                 role="assistant",
-                content=content,
+                content=self._sanitize(content),
                 metadata=metadata or {},
             )
         )

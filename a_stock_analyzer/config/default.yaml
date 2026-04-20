@@ -16,7 +16,7 @@ llm:
   # 通义千问 (Aliyun DashScope): qwen-turbo, qwen-plus, qwen-max
   # 智谱AI (Zhipu): glm-4, glm-4-plus, glm-4-flash
   # 百度文心 (Qianfan): ernie-4.0, ernie-3.5
-  model: gpt-4o
+  model: qwen3.6-plus
 
   api_key: ${OPENAI_API_KEY}
 
@@ -28,7 +28,7 @@ llm:
   # 智谱AI: https://open.bigmodel.cn/api/paas/v4
   # 百度千帆: https://qianfan.baidubce.com/v2
   # 本地模型 (vLLM/Ollama): http://localhost:8000/v1
-  base_url: null
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
 
   # 以下为模型生成参数
   temperature: 0.3

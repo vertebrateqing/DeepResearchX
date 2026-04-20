@@ -56,6 +56,9 @@ async def run_interactive(session_id: str | None = None) -> None:
             print("\n再见!")
             break
 
+        # Sanitize input to remove invalid Unicode surrogates
+        user_input = user_input.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+
         if not user_input:
             continue
 

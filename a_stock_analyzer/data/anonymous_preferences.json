@@ -1,0 +1,9 @@
+{
+  "investment_style": null,
+  "risk_tolerance": null,
+  "preferred_industries": [],
+  "excluded_industries": [],
+  "time_horizon": "medium",
+  "top_n_default": 10,
+  "favorite_metrics": []
+}
