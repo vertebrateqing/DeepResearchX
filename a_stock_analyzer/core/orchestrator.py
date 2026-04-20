@@ -1,4 +1,10 @@
-"""Orchestrator agent that coordinates sub-agents for A-stock analysis."""
+"""Orchestrator agent that coordinates sub-agents for A-stock analysis.
+
+V2 features:
+- Human-in-the-loop intent clarification
+- Session memory integration
+- Context compression support
+"""
 
 import asyncio
 import logging
@@ -7,7 +13,13 @@ from typing import Any, Optional
 from a_stock_analyzer.config.settings import get_settings
 from a_stock_analyzer.core.agent import ReActAgent, SimpleAgent
 from a_stock_analyzer.core.base import AgentContext, BaseAgent, BaseSkill, BaseTool
+from a_stock_analyzer.core.context_compactor import ContextCompactor
+from a_stock_analyzer.core.intent_clarifier import (
+    ClarificationResult,
+    IntentClarifier,
+)
 from a_stock_analyzer.core.message import AgentMessage
+from a_stock_analyzer.memory.manager import MemoryManager
 
 logger = logging.getLogger(__name__)
 
@@ -15,12 +27,10 @@ logger = logging.getLogger(__name__)
 class OrchestratorAgent(BaseAgent):
     """Main orchestrator that breaks down tasks and coordinates sub-agents.
 
-    The orchestrator:
-    1. Receives user request
-    2. Breaks it into sub-tasks
-    3. Dispatches sub-tasks to specialized sub-agents in parallel
-    4. Collects structured summaries from sub-agents
-    5. Synthesizes final investment report
+    V2 features:
+    1. Intent clarification (Human-in-the-loop)
+    2. Session memory (task tracking, findings, user preferences)
+    3. Context compression (auto-compact at 80% threshold)
     """
 
     def __init__(
@@ -30,6 +40,8 @@ class OrchestratorAgent(BaseAgent):
         tools: Optional[list[BaseTool]] = None,
         skills: Optional[list[BaseSkill]] = None,
         model: Optional[str] = None,
+        session_id: Optional[str] = None,
+        user_id: str = "anonymous",
     ):
         cfg = get_settings().agents.orchestrator
         super().__init__(
@@ -46,6 +58,23 @@ class OrchestratorAgent(BaseAgent):
         )
         self._sub_agents: dict[str, BaseAgent] = {}
 
+        # V2 components
+        self.intent_clarifier = IntentClarifier()
+        self.context_compactor = ContextCompactor()
+        self.memory = MemoryManager(
+            session_id=session_id or self._generate_session_id(),
+            user_id=user_id,
+        )
+        self.memory.init_session()
+
+        # Clarification state
+        self._clarification_result: Optional[ClarificationResult] = None
+
+    def _generate_session_id(self) -> str:
+        import uuid
+        from datetime import datetime
+        return f"sess_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+
     def register_sub_agent(self, agent: BaseAgent) -> None:
         """Register a sub-agent."""
         self._sub_agents[agent.name] = agent
@@ -60,32 +89,169 @@ class OrchestratorAgent(BaseAgent):
         user_input: str,
         context: Optional[AgentContext] = None,
     ) -> AgentMessage:
-        """Run the full analysis pipeline.
+        """Run the full analysis pipeline with HITL, memory, and compression.
 
         Pipeline:
-        1. Parse user intent and determine analysis type
-        2. Route to appropriate sub-agents
-        3. Collect results in parallel
-        4. Synthesize final report
+        1. Check for ongoing clarification and process user response
+        2. If no ongoing clarification, analyze intent for missing info
+        3. If missing info, return clarification prompt (HITL)
+        4. If intent is clear, inject memory context and execute
+        5. Track tasks in memory, compress context as needed
+        6. Synthesize final report
         """
         logger.info(f"Orchestrator received request: {user_input[:100]}...")
 
-        # Step 1: Determine the task type
-        task_type = await self._classify_task(user_input)
+        # Record user message in memory
+        self.memory.add_user_message(user_input)
+
+        # Detect and update user preferences from query
+        detected_prefs = self.memory.detect_preferences_from_query(user_input)
+        if detected_prefs:
+            self.memory.update_preferences(**detected_prefs)
+
+        # Step 1: Handle ongoing clarification
+        if self._clarification_result and not self._clarification_result.complete:
+            return await self._handle_clarification_response(user_input)
+
+        # Step 2: Analyze intent for missing information
+        clarification = await self.intent_clarifier.analyze(user_input)
+
+        if not clarification.complete:
+            # Need clarification - HITL
+            self._clarification_result = clarification
+            self.memory.session.clarification_state = {
+                "status": "clarifying",
+                "round": clarification.rounds_completed,
+                "missing_slots": [
+                    {"name": s.slot_name, "question": s.question}
+                    for s in clarification.get_unconfirmed_slots()
+                ],
+            }
+            await self.memory.save()
+
+            prompt = self.intent_clarifier.generate_clarification_prompt(clarification)
+            self.memory.add_assistant_message(prompt)
+
+            return AgentMessage.create_result(
+                sender=self.name,
+                receiver="user",
+                result={
+                    "requires_clarification": True,
+                    "prompt": prompt,
+                    "missing_slots": [
+                        s.slot_name for s in clarification.get_unconfirmed_slots()
+                    ],
+                },
+            )
+
+        # Intent is clear - build merged query
+        merged_query = clarification.merged_query or user_input
+        logger.info(f"Merged query: {merged_query[:100]}...")
+
+        # Step 3: Build context from memory
+        memory_context = self.memory.build_context_prompt()
+        if memory_context:
+            merged_query = f"{memory_context}\n\n---\n\n当前请求: {merged_query}"
+
+        # Step 4: Classify task and execute
+        task_type = await self._classify_task(merged_query)
         logger.info(f"Classified task type: {task_type}")
 
-        # Step 2: Route to sub-agents based on task type
+        # Record task start in memory
+        main_task = self.memory.start_task(
+            task_type=task_type,
+            agent=self.name,
+            inputs={"query": user_input, "merged_query": merged_query},
+        )
+
+        # Execute based on task type
         if task_type == "full_analysis":
-            return await self._run_full_analysis(user_input, context)
+            result = await self._run_full_analysis(merged_query, context)
         elif task_type == "market_only":
-            return await self._run_sub_agent("market_analysis", user_input, context)
+            result = await self._run_sub_agent("market_analysis", merged_query, context)
         elif task_type == "company_qa":
-            return await self._run_sub_agent("financial_rag", user_input, context)
+            result = await self._run_sub_agent("financial_rag", merged_query, context)
         elif task_type == "industry_recommend":
-            return await self._run_industry_recommendation(user_input, context)
+            result = await self._run_industry_recommendation(merged_query, context)
         else:
-            # Default: try to answer directly or dispatch to financial RAG
-            return await self._run_sub_agent("financial_rag", user_input, context)
+            result = await self._run_sub_agent("financial_rag", merged_query, context)
+
+        # Record task completion
+        content = result.content
+        summary = content.get("report", str(content)) if isinstance(content, dict) else str(content)
+        self.memory.update_task(
+            task_id=main_task.task_id,
+            status="completed",
+            result={"summary": summary[:500]},
+        )
+
+        # Add key finding
+        self.memory.add_finding(
+            source="orchestrator",
+            content=summary[:1000],
+            confidence=0.7,
+            expires_hours=24,
+        )
+
+        # Record assistant response
+        self.memory.add_assistant_message(summary[:500])
+
+        # Save session state
+        await self.memory.save()
+
+        return result
+
+    async def _handle_clarification_response(
+        self,
+        user_response: str,
+    ) -> AgentMessage:
+        """Handle user's response to a clarification prompt."""
+        if self._clarification_result is None:
+            return AgentMessage.create_error(
+                sender=self.name,
+                receiver="user",
+                error_message="No active clarification session",
+            )
+
+        # Process user response
+        result = self.intent_clarifier.process_user_response(
+            self._clarification_result,
+            user_response,
+        )
+        self._clarification_result = result
+
+        if result.complete:
+            # All clarified, proceed with merged query
+            merged_query = result.merged_query
+            self.memory.session.clarification_state = {
+                "status": "completed",
+                "rounds": result.rounds_completed,
+                "merged_query": merged_query,
+            }
+            await self.memory.save()
+
+            # Re-run with clarified query
+            return await self.run(merged_query)
+
+        # Still needs more clarification
+        self.memory.session.clarification_state = {
+            "status": "clarifying",
+            "round": result.rounds_completed,
+        }
+        await self.memory.save()
+
+        prompt = self.intent_clarifier.generate_clarification_prompt(result)
+        self.memory.add_assistant_message(prompt)
+
+        return AgentMessage.create_result(
+            sender=self.name,
+            receiver="user",
+            result={
+                "requires_clarification": True,
+                "prompt": prompt,
+                "round": result.rounds_completed,
+            },
+        )
 
     async def _classify_task(self, user_input: str) -> str:
         """Classify the user request into a task type."""
@@ -141,6 +307,20 @@ class OrchestratorAgent(BaseAgent):
         market_summary = self._extract_summary(market_result)
         industry_summary = self._extract_summary(industry_result)
 
+        # Record findings
+        if market_summary:
+            self.memory.add_finding(
+                source="market_analysis",
+                content=market_summary[:500],
+                related_entities=["A股", "市场"],
+            )
+        if industry_summary:
+            self.memory.add_finding(
+                source="industry_screening",
+                content=industry_summary[:500],
+                related_entities=["行业", "投资"],
+            )
+
         # Phase 2: Company selection based on industry results
         company_task = self._dispatch_sub_agent(
             "company_selection",
@@ -161,6 +341,20 @@ class OrchestratorAgent(BaseAgent):
 
         company_summary = self._extract_summary(company_result)
         financial_summary = self._extract_summary(financial_result)
+
+        # Record findings
+        if company_summary:
+            self.memory.add_finding(
+                source="company_selection",
+                content=company_summary[:500],
+                related_entities=["公司", "股票"],
+            )
+        if financial_summary:
+            self.memory.add_finding(
+                source="financial_rag",
+                content=financial_summary[:500],
+                related_entities=["财报", "财务分析"],
+            )
 
         # Phase 4: Synthesize final report
         final_report = await self._synthesize_report(
@@ -272,7 +466,6 @@ class OrchestratorAgent(BaseAgent):
         if isinstance(result, AgentMessage):
             content = result.content
             if isinstance(content, dict):
-                # Try to get summary or answer
                 return content.get("summary", "") or content.get("answer", "") or str(content)
             return str(content)
 
@@ -320,4 +513,4 @@ class OrchestratorAgent(BaseAgent):
             return report
         except Exception as e:
             logger.error(f"Report synthesis failed: {e}")
-            return combined  # Fallback to combined summaries
+            return combined

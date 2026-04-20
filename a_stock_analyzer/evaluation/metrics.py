@@ -1,5 +1,6 @@
 """Evaluation metrics for agent assessment."""
 
+import math
 from typing import Any
 
 
@@ -59,6 +60,3 @@ class MetricsCalculator:
         idcg = sum((2**s - 1) / math.log2(i + 2) for i, s in enumerate(ideal_scores))
 
         return dcg / idcg if idcg > 0 else 0.0
-
-
-import math

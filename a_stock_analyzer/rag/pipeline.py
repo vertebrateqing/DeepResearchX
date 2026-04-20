@@ -91,7 +91,7 @@ class RAGPipeline:
         return doc_ids
 
     async def ingest_pdf(self, file_path: str, extra_metadata: Optional[dict[str, Any]] = None) -> list[str]:
-        """Ingest a PDF file.
+        """Ingest a PDF file (legacy text-only mode).
 
         Args:
             file_path: Path to PDF file
@@ -103,6 +103,77 @@ class RAGPipeline:
         loader = PDFDocumentLoader()
         documents = loader.load(file_path)
         return await self.ingest_documents(documents, extra_metadata)
+
+    async def ingest_multimodal_pdf(
+        self,
+        file_path: str,
+        extra_metadata: Optional[dict[str, Any]] = None,
+        use_vlm: bool = True,
+    ) -> list[str]:
+        """Ingest a PDF file with multimodal support (text, tables, charts).
+
+        Args:
+            file_path: Path to PDF file
+            extra_metadata: Additional metadata
+            use_vlm: Whether to use VLM for chart understanding
+
+        Returns:
+            List of chunk IDs
+        """
+        from a_stock_analyzer.rag.multimodal.pdf_extractor import MultimodalPDFExtractor
+
+        extractor = MultimodalPDFExtractor()
+
+        # Extract all content types
+        doc = extractor.load(file_path)
+
+        # Process images with VLM if enabled
+        if use_vlm and doc.get_image_chunks():
+            doc = await extractor.process_with_vlm(doc)
+
+        # Convert chunks to embedding texts
+        all_texts = doc.to_embedding_texts()
+        all_chunks = doc.chunks
+
+        if not all_texts:
+            logger.warning("No content extracted from PDF")
+            return []
+
+        # Build metadata for each chunk
+        all_metadatas = []
+        for chunk in all_chunks:
+            metadata = {
+                **extra_metadata,
+                "chunk_type": chunk.chunk_type.value,
+                "page_number": chunk.page_number,
+                "chunk_index": chunk.chunk_index,
+                "source": file_path,
+            }
+            if chunk.image_path:
+                metadata["image_path"] = chunk.image_path
+            if chunk.chart_data:
+                metadata["chart_data"] = str(chunk.chart_data)
+            all_metadatas.append(metadata)
+
+        logger.info(
+            f"Extracted {len(all_texts)} chunks from multimodal PDF: "
+            f"{len(doc.get_text_chunks())} text, "
+            f"{len(doc.get_table_chunks())} tables, "
+            f"{len(doc.get_image_chunks())} images/charts"
+        )
+
+        # Generate embeddings
+        embeddings = await self.embedding_service.embed_texts(all_texts)
+
+        # Index into both stores
+        doc_ids = self.retriever.add_documents(
+            documents=all_texts,
+            embeddings=embeddings,
+            metadatas=all_metadatas,
+        )
+
+        logger.info(f"Indexed {len(doc_ids)} multimodal chunks")
+        return doc_ids
 
     async def query(
         self,
@@ -170,13 +241,25 @@ class RAGPipeline:
         """
         from a_stock_analyzer.core.agent import LLMClient
 
-        # Build context from documents
+        # Build context from documents (handle multimodal content)
         context_parts = []
         for i, doc in enumerate(context_documents):
             content = doc.get("content", "")
             metadata = doc.get("metadata", {})
             source = metadata.get("source", "unknown")
-            context_parts.append(f"[Document {i+1}] Source: {source}\n{content}")
+            chunk_type = metadata.get("chunk_type", "text")
+
+            part = f"[Document {i+1}] Source: {source}"
+            if chunk_type != "text":
+                part += f" Type: {chunk_type}"
+
+            # For chart/image chunks, include chart data if available
+            if chunk_type in ("image", "chart") and metadata.get("chart_data"):
+                chart_data = metadata["chart_data"]
+                part += f"\n图表数据: {chart_data}"
+
+            part += f"\n{content}"
+            context_parts.append(part)
 
         context = "\n\n".join(context_parts)
 
@@ -198,6 +281,7 @@ class RAGPipeline:
 
         default_system = (
             "你是一位专业的财务分析师，擅长阅读和分析上市公司财报。"
+            "对于图表数据，请准确引用其中的数值和趋势。"
             "请基于提供的财报信息回答问题，确保回答准确、有理有据。"
         )
 
