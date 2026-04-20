@@ -1,0 +1,107 @@
+# A股分析Agent系统 - 默认配置
+
+# LLM配置
+llm:
+  provider: openai  # openai / local
+  model: gpt-4o
+  api_key: ${OPENAI_API_KEY}
+  base_url: null
+  temperature: 0.3
+  max_tokens: 4096
+  timeout: 120
+
+# Embedding配置
+embedding:
+  provider: openai  # openai / local
+  model: text-embedding-3-large
+  api_key: ${OPENAI_API_KEY}
+  base_url: null
+  local_model_path: null  # 本地模型路径，如 BAAI/bge-large-zh-v1.5
+  batch_size: 32
+  device: auto  # auto / cpu / cuda
+
+# RAG配置
+rag:
+  vector_db:
+    path: ./a_stock_analyzer/data/vector_db
+    collection_name: financial_reports
+    distance_fn: cosine  # cosine / l2 / ip
+  bm25:
+    index_path: ./a_stock_analyzer/data/bm25_index
+    k1: 1.5
+    b: 0.75
+  text_splitter:
+    chunk_size: 512
+    chunk_overlap: 64
+    separators: ["\n\n", "\n", "。", "；", "，", " ", ""]
+  retrieval:
+    top_k_vector: 20
+    top_k_bm25: 20
+    top_k_final: 10
+    rerank: true
+    rerank_top_k: 5
+
+# 数据源配置
+data_sources:
+  akshare:
+    enabled: true
+  web_search:
+    provider: tavily  # tavily / duckduckgo
+    api_key: ${TAVILY_API_KEY}
+    max_results: 10
+
+# Agent配置
+agents:
+  orchestrator:
+    model: gpt-4o
+    system_prompt: |
+      你是A股投资分析系统的主控Agent。你的职责是：
+      1. 理解用户的投资分析需求
+      2. 将任务分解为子任务，分配给专门的Sub-Agent
+      3. 收集各Sub-Agent的分析结果摘要
+      4. 综合生成最终的投资分析报告
+
+      你需要确保报告包含：推荐行业及理由、TopN公司及详细财务分析、风险评估、投资建议。
+  market_analysis:
+    model: gpt-4o
+    system_prompt: |
+      你是市场分析专家Agent。你的职责是分析当前A股市场情况，包括：
+      1. 大盘走势和情绪
+      2. 市场热点板块
+      3. 宏观经济数据影响
+      4. 政策面变化
+
+      请返回结构化的分析摘要，包含关键发现和数据支撑。
+  industry_screening:
+    model: gpt-4o
+    system_prompt: |
+      你是行业筛选专家Agent。你的职责是：
+      1. 分析各行业的景气度
+      2. 评估行业估值水平
+      3. 识别政策支持方向
+      4. 筛选出最具投资价值的行业
+
+      请返回推荐行业列表及详细理由。
+  company_selection:
+    model: gpt-4o
+    system_prompt: |
+      你是公司分析专家Agent。你的职责是：
+      1. 从推荐行业中筛选优质公司
+      2. 分析公司基本面（营收、利润、ROE等）
+      3. 评估估值水平（PE、PB等）
+      4. 识别竞争优势和风险
+
+      请返回TopN公司列表及核心分析要点。
+  financial_rag:
+    model: gpt-4o
+    system_prompt: |
+      你是财报分析专家Agent。你具备阅读和分析上市公司财报的能力。
+      你可以查询财报数据库获取详细信息，并对财务数据进行深度分析。
+
+      分析维度包括：盈利能力、偿债能力、运营效率、成长性、现金流质量。
+
+# 日志配置
+logging:
+  level: INFO
+  format: json  # json / console
+  file: null  # 日志文件路径，null则只输出到控制台

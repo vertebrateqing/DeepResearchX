@@ -1,0 +1,87 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "a-stock-analyzer"
+version = "0.1.0"
+description = "A股分析Multi-Agent系统，支持市场分析、行业推荐、财报RAG和投资建议"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Developer"},
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # Core
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "pyyaml>=6.0",
+    "structlog>=24.1",
+    "tenacity>=8.2",
+    "httpx>=0.27",
+    "aiohttp>=3.9",
+    # RAG
+    "chromadb>=0.5",
+    "rank-bm25>=0.2",
+    "sentence-transformers>=3.0",
+    "langdetect>=1.0",
+    # Document processing
+    "PyPDF2>=3.0",
+    "pdfplumber>=0.10",
+    # Data
+    "akshare>=1.14",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    # Web search
+    "tavily-python>=0.3",
+    "duckduckgo-search>=6.0",
+    # Testing
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4",
+    "mypy>=1.9",
+    "black>=24.0",
+]
+
+[project.scripts]
+a-stock-analyzer = "a_stock_analyzer.cli:main"
+ingest-reports = "a_stock_analyzer.scripts.ingest_reports:main"
+run-evaluation = "a_stock_analyzer.scripts.run_evaluation:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["a_stock_analyzer"]
+
+[tool.pytest.ini_options]
+testpaths = ["a_stock_analyzer/tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
