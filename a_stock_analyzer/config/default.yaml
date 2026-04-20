@@ -16,7 +16,7 @@ llm:
   # 通义千问 (Aliyun DashScope): qwen-turbo, qwen-plus, qwen-max
   # 智谱AI (Zhipu): glm-4, glm-4-plus, glm-4-flash
   # 百度文心 (Qianfan): ernie-4.0, ernie-3.5
-  model: qwen3.6-plus
+  model: qwen-plus
 
   api_key: ${OPENAI_API_KEY}
 
@@ -94,7 +94,7 @@ data_sources:
 # 例如使用 DeepSeek 时，子Agent可用轻量模型，主Agent用推理模型
 agents:
   orchestrator:
-    model: gpt-4o
+    model: qwen-plus
     system_prompt: |
       你是A股投资分析系统的主控Agent。你的职责是：
       1. 理解用户的投资分析需求
@@ -104,7 +104,7 @@ agents:
 
       你需要确保报告包含：推荐行业及理由、TopN公司及详细财务分析、风险评估、投资建议。
   market_analysis:
-    model: gpt-4o
+    model: qwen-plus
     system_prompt: |
       你是市场分析专家Agent。你的职责是分析当前A股市场情况，包括：
       1. 大盘走势和情绪
@@ -114,7 +114,7 @@ agents:
 
       请返回结构化的分析摘要，包含关键发现和数据支撑。
   industry_screening:
-    model: gpt-4o
+    model: qwen-plus
     system_prompt: |
       你是行业筛选专家Agent。你的职责是：
       1. 分析各行业的景气度
@@ -124,7 +124,7 @@ agents:
 
       请返回推荐行业列表及详细理由。
   company_selection:
-    model: gpt-4o
+    model: qwen-plus
     system_prompt: |
       你是公司分析专家Agent。你的职责是：
       1. 从推荐行业中筛选优质公司
@@ -134,7 +134,7 @@ agents:
 
       请返回TopN公司列表及核心分析要点。
   financial_rag:
-    model: gpt-4o
+    model: qwen-plus
     system_prompt: |
       你是财报分析专家Agent。你具备阅读和分析上市公司财报的能力。
       你可以查询财报数据库获取详细信息，并对财务数据进行深度分析。

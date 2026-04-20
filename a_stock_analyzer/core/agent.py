@@ -358,3 +358,15 @@ class SimpleAgent(BaseAgent):
             result={"answer": content},
             task_id=context.task_id if context else None,
         )
+
+    async def run_simple(self, user_input: str) -> str:
+        """Simple LLM call without tool use, returns raw text."""
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": user_input},
+        ]
+
+        response = await self.llm.chat(messages=messages, model=self.model)
+        content = response["choices"][0]["message"].get("content", "")
+        # Sanitize to remove invalid Unicode surrogates
+        return content.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
