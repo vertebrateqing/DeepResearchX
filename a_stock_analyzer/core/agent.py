@@ -16,7 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 class LLMClient:
-    """Unified LLM client supporting OpenAI and local models."""
+    """Unified LLM client supporting OpenAI-compatible APIs.
+
+    Supports all Chinese LLMs via OpenAI-compatible format:
+    - DeepSeek (deepseek-chat, deepseek-reasoner)
+    - Kimi / Moonshot (moonshot-v1-*)
+    - 通义千问 / Qwen (qwen-turbo, qwen-plus, qwen-max)
+    - 智谱AI / GLM (glm-4, glm-4-plus)
+    - 百度文心 / Qianfan (ernie-4.0, ernie-3.5)
+    - Local models via vLLM / Ollama
+    """
 
     def __init__(self) -> None:
         self.settings = get_settings().llm
@@ -27,6 +36,17 @@ class LLMClient:
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=self.settings.timeout)
         return self._client
+
+    @property
+    def _is_chinese_llm(self) -> bool:
+        """Detect if using a Chinese LLM for response compatibility."""
+        model = (self.settings.model or "").lower()
+        url = (self.settings.base_url or "").lower()
+        chinese_markers = [
+            "deepseek", "moonshot", "kimi", "qwen", "glm", "ernie",
+            "qianfan", "dashscope", "zhipu", "baidu",
+        ]
+        return any(m in model or m in url for m in chinese_markers)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -42,10 +62,7 @@ class LLMClient:
         model: Optional[str] = None,
     ) -> dict[str, Any]:
         """Send chat completion request to LLM."""
-        if self.settings.provider == "openai":
-            return await self._openai_chat(messages, tools, temperature, max_tokens, model)
-        else:
-            raise NotImplementedError(f"Provider '{self.settings.provider}' not yet supported")
+        return await self._openai_chat(messages, tools, temperature, max_tokens, model)
 
     async def _openai_chat(
         self,
@@ -62,6 +79,13 @@ class LLMClient:
             "Content-Type": "application/json",
         }
 
+        # Some Chinese providers use x-api-key instead
+        if "dashscope" in url.lower():
+            headers = {
+                "Authorization": f"Bearer {self.settings.api_key}",
+                "Content-Type": "application/json",
+            }
+
         payload: dict[str, Any] = {
             "model": model or self.settings.model,
             "messages": messages,
@@ -73,7 +97,15 @@ class LLMClient:
         elif self.settings.max_tokens:
             payload["max_tokens"] = self.settings.max_tokens
 
-        if tools:
+        # DeepSeek Reasoner (R1) does not support tool calling / temperature=0
+        model_name = (model or self.settings.model or "").lower()
+        is_deepseek_r1 = "deepseek-reasoner" in model_name or "deepseek-r1" in model_name
+
+        if is_deepseek_r1:
+            payload.pop("temperature", None)
+            payload.pop("tools", None)
+            payload.pop("tool_choice", None)
+        elif tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
@@ -83,7 +115,55 @@ class LLMClient:
         response.raise_for_status()
         result = response.json()
 
+        # Normalize Chinese LLM response differences
+        result = self._normalize_response(result)
+
         logger.debug(f"LLM response: {json.dumps(result, ensure_ascii=False)[:500]}")
+        return result
+
+    def _normalize_response(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Normalize response from various Chinese LLM providers to OpenAI format.
+
+        Handles:
+        - DeepSeek reasoning_content -> prepends to content
+        - Moonshot/Kimi minor response format differences
+        - Qianfan nested result structure
+        """
+        if "choices" not in result and "result" in result:
+            # Baidu Qianfan v2 wraps response in "result"
+            if isinstance(result["result"], dict) and "choices" in result["result"]:
+                result = result["result"]
+
+        if "choices" not in result:
+            return result
+
+        choices = result.get("choices", [])
+        if not choices:
+            return result
+
+        message = choices[0].get("message", {})
+        if not isinstance(message, dict):
+            return result
+
+        # DeepSeek: merge reasoning_content into content
+        reasoning = message.get("reasoning_content", "")
+        if reasoning and not message.get("content", "").startswith("[思考]"):
+            content = message.get("content", "")
+            # Prepend reasoning for downstream consumption
+            if reasoning.strip():
+                message["content"] = f"[思考过程]\n{reasoning}\n\n[最终回答]\n{content}"
+            choices[0]["message"] = message
+
+        # Some providers (e.g., older Qwen) wrap tool_calls in different keys
+        if "function_call" in message and "tool_calls" not in message:
+            message["tool_calls"] = [{
+                "id": "call_default",
+                "type": "function",
+                "function": message["function_call"],
+            }]
+            choices[0]["message"] = message
+
+        result["choices"] = choices
         return result
 
     async def close(self) -> None:

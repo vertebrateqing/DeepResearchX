@@ -30,6 +30,36 @@ class VLMProcessor:
             self._client = httpx.AsyncClient(timeout=120)
         return self._client
 
+    def _detect_vlm_model(self) -> str:
+        """Detect which VLM model to use based on configuration.
+
+        Supports Chinese multimodal models:
+        - GPT-4o / Claude (OpenAI compatible)
+        - Qwen-VL (通义千问多模态)
+        - GLM-4V (智谱AI视觉模型)
+        """
+        model = (self.settings.llm.model or "").lower()
+        url = (self.settings.llm.base_url or "").lower()
+
+        # Check if user has configured a vision-capable model
+        vision_models = [
+            "gpt-4o", "claude", "qwen-vl", "qwen2-vl", "glm-4v",
+            "moonshot-v1", "kimi",
+        ]
+        for vm in vision_models:
+            if vm in model:
+                return self.settings.llm.model
+
+        # Default based on provider
+        if "dashscope" in url or "qwen" in url:
+            return "qwen-vl-max"
+        if "zhipu" in url or "bigmodel" in url:
+            return "glm-4v"
+        if "moonshot" in url or "kimi" in url:
+            return "moonshot-v1-8k-vision-preview"
+
+        return "gpt-4o"
+
     async def describe_image(self, image_path: str) -> str:
         """Generate textual description of an image/chart.
 
@@ -42,7 +72,7 @@ class VLMProcessor:
         provider = self.settings.llm.provider
 
         if provider == "openai":
-            return await self._describe_with_gpt4v(image_path)
+            return await self._describe_with_cloud_vlm(image_path)
         else:
             return await self._describe_with_local_vlm(image_path)
 
@@ -84,8 +114,11 @@ class VLMProcessor:
         wait=wait_exponential(multiplier=1, min=2, max=10),
         reraise=True,
     )
-    async def _describe_with_gpt4v(self, image_path: str) -> str:
-        """Describe image using GPT-4V API."""
+    async def _describe_with_cloud_vlm(self, image_path: str) -> str:
+        """Describe image using cloud VLM API (OpenAI-compatible).
+
+        Supports GPT-4o, Qwen-VL, GLM-4V, and other vision models.
+        """
         # Read and encode image
         with open(image_path, "rb") as f:
             image_data = base64.b64encode(f.read()).decode("utf-8")
@@ -101,14 +134,16 @@ class VLMProcessor:
         }
         mime_type = mime_types.get(ext, "image/jpeg")
 
+        vlm_model = self._detect_vlm_model()
         url = self.settings.llm.base_url or "https://api.openai.com/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.settings.llm.api_key}",
             "Content-Type": "application/json",
         }
 
+        # Build vision request using OpenAI-compatible multimodal format
         payload = {
-            "model": "gpt-4o",  # GPT-4o supports vision
+            "model": vlm_model,
             "messages": [
                 {
                     "role": "user",
@@ -136,7 +171,14 @@ class VLMProcessor:
         response.raise_for_status()
         result = response.json()
 
-        return result["choices"][0]["message"].get("content", "")
+        content = result["choices"][0]["message"].get("content", "")
+
+        # DeepSeek/Qwen may return reasoning content for VLM too
+        reasoning = result["choices"][0]["message"].get("reasoning_content", "")
+        if reasoning and not content.startswith("[思考]"):
+            content = f"[思考过程]\n{reasoning}\n\n[图片描述]\n{content}"
+
+        return content
 
     async def _describe_with_local_vlm(self, image_path: str) -> str:
         """Describe image using local VLM (e.g., Qwen-VL)."""
@@ -193,7 +235,7 @@ class VLMProcessor:
             }
 
             payload = {
-                "model": "gpt-4o",
+                "model": self._detect_vlm_model(),
                 "messages": [
                     {
                         "role": "user",

@@ -1,22 +1,61 @@
 # A股分析Agent系统 - 默认配置
+# 支持中国大模型: DeepSeek / Kimi / 通义千问 / 智谱AI / 文心一言 等
+# 所有中国大模型均使用 OpenAI 兼容 API 格式，只需配置 base_url 和 api_key
 
 # LLM配置
 llm:
-  provider: openai  # openai / local
+  # provider: 模型提供商类型
+  #   - openai: 使用 OpenAI 兼容 API (包括所有中国大模型)
+  #   - local: 使用本地部署的模型 (vLLM/Ollama等)
+  provider: openai
+
+  # model: 模型名称
+  # OpenAI: gpt-4o, gpt-4o-mini, gpt-3.5-turbo
+  # DeepSeek: deepseek-chat, deepseek-reasoner
+  # Kimi (Moonshot): moonshot-v1-8k, moonshot-v1-32k, moonshot-v1-128k
+  # 通义千问 (Aliyun DashScope): qwen-turbo, qwen-plus, qwen-max
+  # 智谱AI (Zhipu): glm-4, glm-4-plus, glm-4-flash
+  # 百度文心 (Qianfan): ernie-4.0, ernie-3.5
   model: gpt-4o
+
   api_key: ${OPENAI_API_KEY}
+
+  # base_url: API 基础地址
+  # OpenAI: https://api.openai.com/v1
+  # DeepSeek: https://api.deepseek.com/v1
+  # Kimi (Moonshot): https://api.moonshot.cn/v1
+  # 通义千问 (DashScope): https://dashscope.aliyuncs.com/compatible-mode/v1
+  # 智谱AI: https://open.bigmodel.cn/api/paas/v4
+  # 百度千帆: https://qianfan.baidubce.com/v2
+  # 本地模型 (vLLM/Ollama): http://localhost:8000/v1
   base_url: null
+
+  # 以下为模型生成参数
   temperature: 0.3
   max_tokens: 4096
   timeout: 120
 
 # Embedding配置
 embedding:
-  provider: openai  # openai / local
+  provider: openai
+
+  # Embedding模型名称
+  # OpenAI: text-embedding-3-large, text-embedding-3-small, text-embedding-ada-002
+  # 智谱AI: embedding-3
+  # 百度千帆: embedding-v1
+  # 本地: BAAI/bge-large-zh-v1.5, BAAI/bge-m3, moka-ai/m3e-base
   model: text-embedding-3-large
+
   api_key: ${OPENAI_API_KEY}
+
+  # Embedding API base_url (可与 LLM 不同)
+  # OpenAI: https://api.openai.com/v1
+  # 智谱AI: https://open.bigmodel.cn/api/paas/v4
+  # 百度千帆: https://qianfan.baidubce.com/v2
   base_url: null
-  local_model_path: null  # 本地模型路径，如 BAAI/bge-large-zh-v1.5
+
+  # 本地模型配置 (当 provider=local 时使用)
+  local_model_path: null  # 如: BAAI/bge-large-zh-v1.5
   batch_size: 32
   device: auto  # auto / cpu / cuda
 
@@ -51,6 +90,8 @@ data_sources:
     max_results: 10
 
 # Agent配置
+# 注意: agents.*.model 可覆盖全局 llm.model
+# 例如使用 DeepSeek 时，子Agent可用轻量模型，主Agent用推理模型
 agents:
   orchestrator:
     model: gpt-4o

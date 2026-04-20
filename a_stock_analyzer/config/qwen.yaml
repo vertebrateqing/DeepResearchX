@@ -1,0 +1,72 @@
+# 阿里通义千问 (Qwen) 专用配置模板
+# 复制此文件为 custom.yaml 并填入你的 API Key 即可使用
+
+llm:
+  provider: openai
+  model: qwen-plus              # 选项: qwen-turbo(快) / qwen-plus(均衡) / qwen-max(最强)
+  api_key: ${DASHSCOPE_API_KEY} # 从 https://dashscope.aliyun.com/ 获取
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  temperature: 0.3
+  max_tokens: 4096
+  timeout: 120
+
+embedding:
+  provider: openai
+  model: text-embedding-v3      # 千问Embedding: text-embedding-v3 / text-embedding-v2
+  api_key: ${DASHSCOPE_API_KEY}
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  local_model_path: null
+  batch_size: 25                # 千问Embedding批量上限25
+  device: auto
+
+agents:
+  orchestrator:
+    model: qwen-plus
+    system_prompt: |
+      你是A股投资分析系统的主控Agent。你的职责是：
+      1. 理解用户的投资分析需求
+      2. 将任务分解为子任务，分配给专门的Sub-Agent
+      3. 收集各Sub-Agent的分析结果摘要
+      4. 综合生成最终的投资分析报告
+
+      你需要确保报告包含：推荐行业及理由、TopN公司及详细财务分析、风险评估、投资建议。
+  market_analysis:
+    model: qwen-plus
+    system_prompt: |
+      你是市场分析专家Agent。你的职责是分析当前A股市场情况，包括：
+      1. 大盘走势和情绪
+      2. 市场热点板块
+      3. 宏观经济数据影响
+      4. 政策面变化
+
+      请返回结构化的分析摘要，包含关键发现和数据支撑。
+  industry_screening:
+    model: qwen-plus
+    system_prompt: |
+      你是行业筛选专家Agent。你的职责是：
+      1. 分析各行业的景气度
+      2. 评估行业估值水平
+      3. 识别政策支持方向
+      4. 筛选出最具投资价值的行业
+
+      请返回推荐行业列表及详细理由。
+  company_selection:
+    model: qwen-plus
+    system_prompt: |
+      你是公司分析专家Agent。你的职责是：
+      1. 从推荐行业中筛选优质公司
+      2. 分析公司基本面（营收、利润、ROE等）
+      3. 评估估值水平（PE、PB等）
+      4. 识别竞争优势和风险
+
+      请返回TopN公司列表及核心分析要点。
+  financial_rag:
+    model: qwen-plus
+    system_prompt: |
+      你是财报分析专家Agent。你具备阅读和分析上市公司财报的能力。
+      你可以查询财报数据库获取详细信息，并对财务数据进行深度分析。
+
+      分析维度包括：盈利能力、偿债能力、运营效率、成长性、现金流质量。
+
+# 如需使用千问多模态模型 (qwen-vl-max) 分析财报中的图表，
+# 将 llm.model 设为 qwen-vl-max 即可，base_url 保持不变
