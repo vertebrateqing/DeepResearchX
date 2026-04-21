@@ -1,5 +1,6 @@
 """AKShare data tools for A-share market data."""
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -81,7 +82,7 @@ class AKShareTool(BaseTool):
 
     async def _get_stock_spot(self, symbol: str, limit: int) -> dict[str, Any]:
         """Get real-time stock quotes."""
-        df = self.ak.stock_zh_a_spot_em()
+        df = await asyncio.to_thread(self.ak.stock_zh_a_spot_em)
         if symbol:
             df = df[df["代码"] == symbol]
         df = df.head(limit)
@@ -93,7 +94,7 @@ class AKShareTool(BaseTool):
 
     async def _get_industry_board(self, limit: int) -> dict[str, Any]:
         """Get industry board data."""
-        df = self.ak.stock_board_industry_name_em()
+        df = await asyncio.to_thread(self.ak.stock_board_industry_name_em)
         df = df.head(limit)
         return {
             "data_type": "industry_board",
@@ -108,15 +109,15 @@ class AKShareTool(BaseTool):
 
         # Try to get financial summary
         try:
-            df = self.ak.stock_financial_report_sina(stock=symbol)
+            df = await asyncio.to_thread(self.ak.stock_financial_report_sina, stock=symbol)
             return {
                 "data_type": "stock_financial",
                 "symbol": symbol,
                 "data": json.loads(df.to_json(orient="records", force_ascii=False)),
             }
-        except Exception as e:
+        except Exception:
             # Fallback to basic financial data
-            df = self.ak.stock_financial_analysis_indicator(symbol=symbol)
+            df = await asyncio.to_thread(self.ak.stock_financial_analysis_indicator, symbol=symbol)
             return {
                 "data_type": "stock_financial",
                 "symbol": symbol,
@@ -128,7 +129,7 @@ class AKShareTool(BaseTool):
         if not symbol:
             return {"error": "symbol is required for stock_news"}
 
-        df = self.ak.stock_news_em(symbol=symbol)
+        df = await asyncio.to_thread(self.ak.stock_news_em, symbol=symbol)
         df = df.head(limit)
         return {
             "data_type": "stock_news",
@@ -140,7 +141,7 @@ class AKShareTool(BaseTool):
     async def _get_market_sentiment(self) -> dict[str, Any]:
         """Get market sentiment indicators."""
         # Get market overview
-        df = self.ak.stock_zh_index_spot()
+        df = await asyncio.to_thread(self.ak.stock_zh_index_spot)
         return {
             "data_type": "market_sentiment",
             "indices": json.loads(df.to_json(orient="records", force_ascii=False)),
@@ -148,7 +149,7 @@ class AKShareTool(BaseTool):
 
     async def _get_stock_list(self) -> dict[str, Any]:
         """Get A-share stock list."""
-        df = self.ak.stock_zh_a_spot_em()
+        df = await asyncio.to_thread(self.ak.stock_zh_a_spot_em)
         return {
             "data_type": "stock_list",
             "count": len(df),
@@ -161,7 +162,7 @@ class AKShareTool(BaseTool):
             return {"error": "industry is required for industry_stocks"}
 
         try:
-            df = self.ak.stock_board_industry_cons_em(symbol=industry)
+            df = await asyncio.to_thread(self.ak.stock_board_industry_cons_em, symbol=industry)
             df = df.head(limit)
             return {
                 "data_type": "industry_stocks",

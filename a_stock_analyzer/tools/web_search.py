@@ -99,23 +99,27 @@ class WebSearchTool(BaseTool):
     async def _search_duckduckgo(self, query: str, max_results: int) -> dict[str, Any]:
         """Search using DuckDuckGo."""
         try:
+            import asyncio
             from duckduckgo_search import DDGS
 
-            with DDGS() as ddgs:
-                results = []
-                for result in ddgs.text(query, max_results=min(max_results, 10)):
-                    results.append({
-                        "title": result.get("title", ""),
-                        "url": result.get("href", ""),
-                        "content": result.get("body", ""),
-                    })
+            def _do_search():
+                with DDGS() as ddgs:
+                    results = []
+                    for result in ddgs.text(query, max_results=min(max_results, 10)):
+                        results.append({
+                            "title": result.get("title", ""),
+                            "url": result.get("href", ""),
+                            "content": result.get("body", ""),
+                        })
+                    return results
 
-                return {
-                    "query": query,
-                    "provider": "duckduckgo",
-                    "results": results,
-                    "total_results": len(results),
-                }
+            results = await asyncio.to_thread(_do_search)
+            return {
+                "query": query,
+                "provider": "duckduckgo",
+                "results": results,
+                "total_results": len(results),
+            }
         except Exception as e:
             logger.error(f"DuckDuckGo search failed: {e}")
             return {

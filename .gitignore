@@ -42,6 +42,8 @@ ENV/
 a_stock_analyzer/data/raw/*
 a_stock_analyzer/data/processed/*
 a_stock_analyzer/data/vector_db/*
+a_stock_analyzer/data/output/*
+a_stock_analyzer/data/sessions/*
 !a_stock_analyzer/data/raw/.gitkeep
 !a_stock_analyzer/data/processed/.gitkeep
 !a_stock_analyzer/data/vector_db/.gitkeep
