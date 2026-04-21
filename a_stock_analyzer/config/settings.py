@@ -28,6 +28,7 @@ class EmbeddingConfig(BaseSettings):
     model: str = "text-embedding-3-large"
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    timeout: int = 60
     local_model_path: Optional[str] = None
     batch_size: int = 32
     device: Literal["auto", "cpu", "cuda"] = "auto"
@@ -102,6 +103,12 @@ class LoggingConfig(BaseSettings):
     file: Optional[str] = None
 
 
+class OutputConfig(BaseSettings):
+    """Output directory configuration for generated reports."""
+
+    output_dir: str = "./a_stock_analyzer/data/output"
+
+
 class Settings(BaseSettings):
     """Application settings loaded from YAML and environment variables."""
 
@@ -117,6 +124,7 @@ class Settings(BaseSettings):
     data_sources: DataSourcesConfig = Field(default_factory=DataSourcesConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    output: OutputConfig = Field(default_factory=OutputConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path = DEFAULT_CONFIG_PATH) -> "Settings":

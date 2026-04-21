@@ -1,5 +1,6 @@
 """Complete RAG pipeline for financial report QA."""
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -7,10 +8,37 @@ from a_stock_analyzer.config.settings import get_settings
 from a_stock_analyzer.rag.document_loader import Document, PDFDocumentLoader
 from a_stock_analyzer.rag.embedding import EmbeddingService
 from a_stock_analyzer.rag.hybrid_retriever import HybridRetriever
+from a_stock_analyzer.rag.query_rewriter import QueryRewriter
 from a_stock_analyzer.rag.reranker import CrossEncoderReranker
 from a_stock_analyzer.rag.text_splitter import RecursiveTextSplitter
 
 logger = logging.getLogger(__name__)
+
+
+def _merge_retrieval_results(
+    all_results: list[list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Merge retrieval results from multiple query variants.
+
+    Deduplicates by doc_id, keeps the highest score, sorts by score.
+    """
+    seen: dict[str, dict[str, Any]] = {}
+    for results in all_results:
+        for doc in results:
+            doc_id = doc.get("id", "")
+            if not doc_id:
+                continue
+            score = doc.get("score", 0)
+            if doc_id in seen:
+                # Keep the better score (lower distance = better for cosine/l2)
+                if score < seen[doc_id]["score"]:
+                    seen[doc_id] = doc
+            else:
+                seen[doc_id] = doc
+
+    # Sort by score (lower distance = better for cosine/l2)
+    merged = sorted(seen.values(), key=lambda d: d.get("score", float("inf")))
+    return merged
 
 
 class RAGPipeline:
@@ -31,11 +59,13 @@ class RAGPipeline:
         embedding_service: Optional[EmbeddingService] = None,
         text_splitter: Optional[RecursiveTextSplitter] = None,
         reranker: Optional[CrossEncoderReranker] = None,
+        query_rewriter: Optional[QueryRewriter] = None,
     ) -> None:
         self.retriever = retriever or HybridRetriever()
         self.embedding_service = embedding_service or EmbeddingService()
         self.text_splitter = text_splitter or RecursiveTextSplitter()
         self.reranker = reranker or CrossEncoderReranker()
+        self.query_rewriter = query_rewriter or QueryRewriter()
         self.settings = get_settings().rag.retrieval
 
     async def ingest_documents(
@@ -181,6 +211,7 @@ class RAGPipeline:
         top_k: Optional[int] = None,
         filter_dict: Optional[dict[str, Any]] = None,
         use_rerank: Optional[bool] = None,
+        rewrite: bool = True,
     ) -> dict[str, Any]:
         """Query the RAG system.
 
@@ -189,6 +220,7 @@ class RAGPipeline:
             top_k: Number of results to return
             filter_dict: Metadata filter
             use_rerank: Whether to use reranking
+            rewrite: Whether to rewrite query into multiple variants
 
         Returns:
             Dict with retrieved documents and metadata
@@ -196,17 +228,32 @@ class RAGPipeline:
         top_k = top_k or self.settings.top_k_final
         use_rerank = use_rerank if use_rerank is not None else self.settings.rerank
 
-        # Generate query embedding
-        query_embedding = await self.embedding_service.embed_query(query)
+        # Query rewriting: expand into multiple variants
+        queries = [query]
+        if rewrite:
+            queries = await self.query_rewriter.rewrite(query, n_variants=3)
 
-        # Retrieve documents
-        results = await self.retriever.retrieve(
-            query=query,
-            query_embedding=query_embedding,
-            filter_dict=filter_dict,
+        # Generate embeddings for all variants
+        query_embeddings = await self.embedding_service.embed_texts(queries)
+
+        # Retrieve documents for each variant in parallel
+        retrieval_tasks = [
+            self.retriever.retrieve(
+                query=q,
+                query_embedding=emb,
+                filter_dict=filter_dict,
+            )
+            for q, emb in zip(queries, query_embeddings)
+        ]
+        all_results = await asyncio.gather(*retrieval_tasks)
+
+        # Merge results from all variants
+        results = _merge_retrieval_results(all_results)
+
+        logger.info(
+            f"[RAGPipeline] Query variants: {len(queries)}, "
+            f"merged unique docs: {len(results)} for original query: {query[:50]}..."
         )
-
-        logger.info(f"Retrieved {len(results)} documents for query: {query[:50]}...")
 
         # Rerank if enabled
         if use_rerank and results:
@@ -218,6 +265,7 @@ class RAGPipeline:
 
         return {
             "query": query,
+            "queries_expanded": queries,
             "results": results,
             "total_results": len(results),
             "retriever_type": "hybrid",

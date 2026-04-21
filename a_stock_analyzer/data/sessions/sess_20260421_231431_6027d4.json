@@ -1,0 +1,40 @@
+{
+  "session_id": "sess_20260421_231431_6027d4",
+  "user_id": "anonymous",
+  "created_at": "2026-04-21T23:14:31.483946",
+  "updated_at": "2026-04-21T23:14:31.485970",
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "比亚迪财报分析",
+      "timestamp": "2026-04-21T23:14:31.484484",
+      "metadata": {}
+    }
+  ],
+  "task_stack": [],
+  "completed_tasks": [],
+  "accumulated_findings": [],
+  "user_preferences": {
+    "investment_style": null,
+    "risk_tolerance": null,
+    "preferred_industries": [],
+    "excluded_industries": [],
+    "time_horizon": "medium",
+    "top_n_default": 10,
+    "favorite_metrics": []
+  },
+  "clarification_state": {
+    "status": "clarifying",
+    "round": 0,
+    "missing_slots": [
+      {
+        "name": "report_year",
+        "question": "请问您想分析哪个年份/季度的财报？"
+      },
+      {
+        "name": "company_symbol",
+        "question": "请确认 '比亚迪' 具体指哪家公司（提供股票代码）？"
+      }
+    ]
+  }
+}

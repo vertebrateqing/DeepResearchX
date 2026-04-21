@@ -1,0 +1,107 @@
+{
+  "session_id": "sess_20260421_233316_91febb",
+  "user_id": "anonymous",
+  "created_at": "2026-04-21T23:33:16.806393",
+  "updated_at": "2026-04-21T23:34:03.400593",
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "分析2025年比亚迪(002594)的财报",
+      "timestamp": "2026-04-21T23:33:16.806657",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "## 市场分析\n\nLLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401\n\n---\n\n## 行业推荐\n\nLLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401\n\n---\n\n## 公司选取\n\nLLM call failed: Client error '",
+      "timestamp": "2026-04-21T23:34:03.400544",
+      "metadata": {}
+    }
+  ],
+  "task_stack": [],
+  "completed_tasks": [
+    {
+      "task_id": "5c361243-3e2e-472e-a2d1-42083ee08415",
+      "task_type": "full_analysis",
+      "success": true,
+      "summary": "{'summary': \"## 市场分析\\n\\nLLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401\\n\\n---\\n\\n## 行业推荐\\n\\nLLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401\\n\\n---\\n\\n## 公司选取\\n\\nLL",
+      "full_result": {
+        "summary": "## 市场分析\n\nLLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401\n\n---\n\n## 行业推荐\n\nLLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401\n\n---\n\n## 公司选取\n\nLLM call failed: Client error '"
+      },
+      "completed_at": "2026-04-21T23:34:03.400490"
+    }
+  ],
+  "accumulated_findings": [
+    {
+      "finding_id": "finding_37cbba76",
+      "source": "market_analysis",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "confidence": 0.5,
+      "related_entities": [
+        "A股",
+        "市场"
+      ],
+      "extracted_at": "2026-04-21T23:33:42.283828",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_4f1e695e",
+      "source": "industry_screening",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "confidence": 0.5,
+      "related_entities": [
+        "行业",
+        "投资"
+      ],
+      "extracted_at": "2026-04-21T23:33:42.283839",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_585bc9a1",
+      "source": "company_selection",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "confidence": 0.5,
+      "related_entities": [
+        "公司",
+        "股票"
+      ],
+      "extracted_at": "2026-04-21T23:33:59.015826",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_9f12460c",
+      "source": "financial_rag",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "confidence": 0.5,
+      "related_entities": [
+        "财报",
+        "财务分析"
+      ],
+      "extracted_at": "2026-04-21T23:33:59.015835",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_d6134694",
+      "source": "orchestrator",
+      "source_ref": "",
+      "content": "## 市场分析\n\nLLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401\n\n---\n\n## 行业推荐\n\nLLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401\n\n---\n\n## 公司选取\n\nLLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401\n\n---\n\n## 财报深度分析\n\nLLM call failed: Client error '401 Unauthorized' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "confidence": 0.7,
+      "related_entities": [],
+      "extracted_at": "2026-04-21T23:34:03.400515",
+      "expires_at": "2026-04-22T23:34:03.400495"
+    }
+  ],
+  "user_preferences": {
+    "investment_style": null,
+    "risk_tolerance": null,
+    "preferred_industries": [],
+    "excluded_industries": [],
+    "time_horizon": "medium",
+    "top_n_default": 10,
+    "favorite_metrics": []
+  },
+  "clarification_state": {}
+}

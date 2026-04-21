@@ -1,0 +1,107 @@
+{
+  "session_id": "sess_20260421_235743_ea2655",
+  "user_id": "anonymous",
+  "created_at": "2026-04-21T23:57:43.792227",
+  "updated_at": "2026-04-21T23:58:46.867494",
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "分析比亚迪002594的2025年财报",
+      "timestamp": "2026-04-21T23:57:43.792580",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "## 市场分析\n\nLLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n\n---\n\n## 行业推荐\n\nLLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n\n---\n\n## 公司选取\n\nLLM call failed: Client error '404 Not Found' for url 'https://dashscop",
+      "timestamp": "2026-04-21T23:58:46.867449",
+      "metadata": {}
+    }
+  ],
+  "task_stack": [],
+  "completed_tasks": [
+    {
+      "task_id": "4323c3a0-737c-40c7-8f4a-de58a274163c",
+      "task_type": "full_analysis",
+      "success": true,
+      "summary": "{'summary': \"## 市场分析\\n\\nLLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\\n\\n---\\n\\n## 行业推荐\\n\\nLLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\\n\\n---\\n\\n## 公司选取\\n\\nLLM call failed: Client error '404 Not Fou",
+      "full_result": {
+        "summary": "## 市场分析\n\nLLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n\n---\n\n## 行业推荐\n\nLLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n\n---\n\n## 公司选取\n\nLLM call failed: Client error '404 Not Found' for url 'https://dashscop"
+      },
+      "completed_at": "2026-04-21T23:58:46.867361"
+    }
+  ],
+  "accumulated_findings": [
+    {
+      "finding_id": "finding_e9e2d90a",
+      "source": "market_analysis",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+      "confidence": 0.5,
+      "related_entities": [
+        "A股",
+        "市场"
+      ],
+      "extracted_at": "2026-04-21T23:58:21.951676",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_95c9a93e",
+      "source": "industry_screening",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+      "confidence": 0.5,
+      "related_entities": [
+        "行业",
+        "投资"
+      ],
+      "extracted_at": "2026-04-21T23:58:21.951686",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_61fd624d",
+      "source": "company_selection",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+      "confidence": 0.5,
+      "related_entities": [
+        "公司",
+        "股票"
+      ],
+      "extracted_at": "2026-04-21T23:58:42.221639",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_5ebed466",
+      "source": "financial_rag",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+      "confidence": 0.5,
+      "related_entities": [
+        "财报",
+        "财务分析"
+      ],
+      "extracted_at": "2026-04-21T23:58:42.221654",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_ba0c0f94",
+      "source": "orchestrator",
+      "source_ref": "",
+      "content": "## 市场分析\n\nLLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n\n---\n\n## 行业推荐\n\nLLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n\n---\n\n## 公司选取\n\nLLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n\n---\n\n## 财报深度分析\n\nLLM call failed: Client error '404 Not Found' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+      "confidence": 0.7,
+      "related_entities": [],
+      "extracted_at": "2026-04-21T23:58:46.867401",
+      "expires_at": "2026-04-22T23:58:46.867369"
+    }
+  ],
+  "user_preferences": {
+    "investment_style": null,
+    "risk_tolerance": null,
+    "preferred_industries": [],
+    "excluded_industries": [],
+    "time_horizon": "medium",
+    "top_n_default": 10,
+    "favorite_metrics": []
+  },
+  "clarification_state": {}
+}

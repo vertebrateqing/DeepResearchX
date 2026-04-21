@@ -118,7 +118,19 @@ class LLMClient:
         # Normalize Chinese LLM response differences
         result = self._normalize_response(result)
 
-        logger.debug(f"LLM response: {json.dumps(result, ensure_ascii=False)[:500]}")
+        # Log response summary
+        usage = result.get("usage", {})
+        choices = result.get("choices", [])
+        msg = choices[0].get("message", {}) if choices else {}
+        has_tools = bool(msg.get("tool_calls"))
+        content_preview = msg.get("content", "")[:200] if msg else ""
+        logger.info(
+            f"LLM response: prompt_tokens={usage.get('prompt_tokens', '?')}, "
+            f"completion_tokens={usage.get('completion_tokens', '?')}, "
+            f"has_tool_calls={has_tools}, content_len={len(msg.get('content', ''))}, "
+            f"content_preview={content_preview[:120]!r}"
+        )
+        logger.debug(f"LLM response full: {json.dumps(result, ensure_ascii=False)[:800]}")
         return result
 
     def _normalize_response(self, result: dict[str, Any]) -> dict[str, Any]:
@@ -235,6 +247,7 @@ class ReActAgent(BaseAgent):
             tool_calls = message.get("tool_calls", [])
 
             if tool_calls:
+                logger.info(f"Agent {self.name} received {len(tool_calls)} tool call(s)")
                 # Add assistant message with tool calls
                 messages.append({
                     "role": "assistant",
@@ -248,10 +261,12 @@ class ReActAgent(BaseAgent):
                     tool_name = function["name"]
                     tool_args = json.loads(function["arguments"])
 
-                    logger.info(f"Agent {self.name} calling tool: {tool_name}")
+                    logger.info(f"Agent {self.name} calling tool: {tool_name}, args={json.dumps(tool_args, ensure_ascii=False)[:200]}")
 
                     try:
                         result = await self.call_tool(tool_name, tool_args)
+                        result_summary = json.dumps(result, ensure_ascii=False)[:300]
+                        logger.info(f"Agent {self.name} tool {tool_name} result: {result_summary}")
                         run_ctx.add_tool_call(tool_name, tool_args, result)
                     except Exception as e:
                         logger.error(f"Tool {tool_name} failed: {e}")
@@ -266,8 +281,9 @@ class ReActAgent(BaseAgent):
             else:
                 # No tool calls - this is the final answer
                 final_answer = message.get("content", "")
+                logger.info(f"Agent {self.name} final answer received, length={len(final_answer)}")
                 # Sanitize to remove invalid Unicode surrogates
-                final_answer = final_answer.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+                final_answer = "".join(ch for ch in final_answer if not (0xD800 <= ord(ch) <= 0xDFFF))
                 break
 
         # Generate summary for parent agent
@@ -312,7 +328,7 @@ class ReActAgent(BaseAgent):
         response = await self.llm.chat(messages=messages, model=self.model)
         content = response["choices"][0]["message"].get("content", "")
         # Sanitize to remove invalid Unicode surrogates
-        return content.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        return "".join(ch for ch in content if not (0xD800 <= ord(ch) <= 0xDFFF))
 
 
 class SimpleAgent(BaseAgent):
@@ -369,4 +385,4 @@ class SimpleAgent(BaseAgent):
         response = await self.llm.chat(messages=messages, model=self.model)
         content = response["choices"][0]["message"].get("content", "")
         # Sanitize to remove invalid Unicode surrogates
-        return content.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        return "".join(ch for ch in content if not (0xD800 <= ord(ch) <= 0xDFFF))

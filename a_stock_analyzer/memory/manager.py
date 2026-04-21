@@ -85,24 +85,31 @@ class MemoryManager:
             return self.init_session()
         return self._session
 
-    async def save(self) -> None:
-        """Save session state and sync findings to long-term memory."""
+    async def save(self, sync_long_term: bool = True) -> None:
+        """Save session state and optionally sync findings to long-term memory."""
         if self._session is None:
             return
 
+        logger.info(f"[MemoryManager] Saving session {self.session_id}, findings={len(self._session.accumulated_findings)}, tasks={len(self._session.task_stack)}, completed={len(self._session.completed_tasks)}, sync_lt={sync_long_term}")
         # Save session
         self.session_store.save(self._session)
+        logger.info(f"[MemoryManager] Session store saved")
+
+        if not sync_long_term:
+            return
 
         # Sync non-expired findings to long-term memory
+        synced = 0
+        failed = 0
         for finding in self._session.accumulated_findings:
-            # Check if already in long-term store (avoid duplicates)
-            # For simplicity, we add all - ChromaDB deduplication by ID
             try:
                 await self.long_term_store.add_finding(finding)
+                synced += 1
             except Exception as e:
+                failed += 1
                 logger.warning(f"Failed to sync finding {finding.finding_id}: {e}")
 
-        logger.debug(f"Saved session {self.session_id}")
+        logger.info(f"[MemoryManager] Synced {synced} findings to long-term memory, {failed} failed")
 
     def close(self) -> None:
         """Close session, final save, and cleanup."""
@@ -114,8 +121,9 @@ class MemoryManager:
 
     @staticmethod
     def _sanitize(text: str) -> str:
-        """Remove invalid Unicode surrogate characters."""
-        return text.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        """Remove invalid Unicode surrogate characters without corrupting valid text."""
+        # Strip lone surrogates (U+D800–U+DFFF) only; keep everything else intact.
+        return "".join(ch for ch in text if not (0xD800 <= ord(ch) <= 0xDFFF))
 
     def add_user_message(self, content: str, metadata: dict[str, Any] | None = None) -> None:
         """Record a user message."""

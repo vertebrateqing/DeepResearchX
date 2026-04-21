@@ -1,0 +1,36 @@
+{
+  "session_id": "sess_20260421_234856_25cd85",
+  "user_id": "anonymous",
+  "created_at": "2026-04-21T23:48:56.848479",
+  "updated_at": "2026-04-21T23:48:56.849711",
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "分析比亚迪002594的2025年财报",
+      "timestamp": "2026-04-21T23:48:56.848789",
+      "metadata": {}
+    }
+  ],
+  "task_stack": [],
+  "completed_tasks": [],
+  "accumulated_findings": [],
+  "user_preferences": {
+    "investment_style": null,
+    "risk_tolerance": null,
+    "preferred_industries": [],
+    "excluded_industries": [],
+    "time_horizon": "medium",
+    "top_n_default": 10,
+    "favorite_metrics": []
+  },
+  "clarification_state": {
+    "status": "clarifying",
+    "round": 0,
+    "missing_slots": [
+      {
+        "name": "company_symbol",
+        "question": "请确认 '分析比' 具体指哪家公司（提供股票代码）？"
+      }
+    ]
+  }
+}

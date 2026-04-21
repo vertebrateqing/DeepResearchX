@@ -28,7 +28,7 @@ llm:
   # 智谱AI: https://open.bigmodel.cn/api/paas/v4
   # 百度千帆: https://qianfan.baidubce.com/v2
   # 本地模型 (vLLM/Ollama): http://localhost:8000/v1
-  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
 
   # 以下为模型生成参数
   temperature: 0.3
@@ -44,15 +44,19 @@ embedding:
   # 智谱AI: embedding-3
   # 百度千帆: embedding-v1
   # 本地: BAAI/bge-large-zh-v1.5, BAAI/bge-m3, moka-ai/m3e-base
-  model: text-embedding-3-large
+  model: text-embedding-v1
 
   api_key: ${OPENAI_API_KEY}
 
   # Embedding API base_url (可与 LLM 不同)
-  # OpenAI: https://api.openai.com/v1
-  # 智谱AI: https://open.bigmodel.cn/api/paas/v4
-  # 百度千帆: https://qianfan.baidubce.com/v2
-  base_url: null
+  # OpenAI: https://api.openai.com/v1/embeddings
+  # 智谱AI: https://open.bigmodel.cn/api/paas/v4/embeddings
+  # 百度千帆: https://qianfan.baidubce.com/v2/embeddings
+  # 通义千问: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+
+  # 请求超时(秒)。若在中国大陆访问OpenAI较慢，建议改小timeout以快速失败，或切换为国内API
+  timeout: 30
 
   # 本地模型配置 (当 provider=local 时使用)
   local_model_path: null  # 如: BAAI/bge-large-zh-v1.5
@@ -140,6 +144,10 @@ agents:
       你可以查询财报数据库获取详细信息，并对财务数据进行深度分析。
 
       分析维度包括：盈利能力、偿债能力、运营效率、成长性、现金流质量。
+
+# 输出配置
+output:
+  output_dir: ./a_stock_analyzer/data/output  # 报告输出目录
 
 # 日志配置
 logging:

@@ -57,7 +57,7 @@ async def run_interactive(session_id: str | None = None) -> None:
             break
 
         # Sanitize input to remove invalid Unicode surrogates
-        user_input = user_input.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        user_input = "".join(ch for ch in user_input if not (0xD800 <= ord(ch) <= 0xDFFF))
 
         if not user_input:
             continue

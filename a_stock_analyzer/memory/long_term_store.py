@@ -73,8 +73,11 @@ class LongTermStore:
         Returns:
             Document ID in vector store
         """
+        _log = logging.getLogger(__name__)
+        _log.info(f"[LongTermStore] Adding finding {finding.finding_id}, source={finding.source}, content_len={len(finding.content)}")
         # Generate embedding
         embedding = await self.embedding_service.embed_query(finding.content)
+        _log.info(f"[LongTermStore] Embedding generated for {finding.finding_id}, dim={len(embedding)}")
 
         # Metadata
         metadata = {
@@ -97,7 +100,7 @@ class LongTermStore:
             ids=[finding.finding_id],
         )
 
-        logger.info(f"Added finding {finding.finding_id} to long-term memory")
+        _log.info(f"Added finding {finding.finding_id} to long-term memory")
         return doc_ids[0]
 
     async def search_findings(

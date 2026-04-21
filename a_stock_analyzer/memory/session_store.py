@@ -59,8 +59,7 @@ class SessionStore:
 
     def _sanitize_text(self, text: str) -> str:
         """Remove invalid Unicode surrogate characters from text."""
-        # Remove surrogate pairs and other invalid characters
-        return text.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        return "".join(ch for ch in text if not (0xD800 <= ord(ch) <= 0xDFFF))
 
     def load(self, session_id: str) -> SessionMemory | None:
         """Load session from JSON."""

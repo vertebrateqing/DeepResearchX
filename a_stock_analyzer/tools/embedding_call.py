@@ -35,7 +35,8 @@ class EmbeddingTool(BaseTool):
     @property
     def client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=60)
+            timeout = getattr(self.settings, "timeout", 60)
+            self._client = httpx.AsyncClient(timeout=timeout)
         return self._client
 
     async def execute(
@@ -74,6 +75,9 @@ class EmbeddingTool(BaseTool):
 
         all_embeddings = []
         batch_size = self.settings.batch_size
+        total_batches = (len(texts) + batch_size - 1) // batch_size
+
+        logger.info(f"[Embedding] Requesting {len(texts)} texts in {total_batches} batch(es), model={model}, url={url}")
 
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
@@ -82,13 +86,16 @@ class EmbeddingTool(BaseTool):
                 "input": batch,
             }
 
+            logger.debug(f"[Embedding] Batch {i // batch_size + 1}/{total_batches}: {len(batch)} texts")
             response = await self.client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             result = response.json()
 
             batch_embeddings = [item["embedding"] for item in result["data"]]
             all_embeddings.extend(batch_embeddings)
+            logger.info(f"[Embedding] Batch {i // batch_size + 1}/{total_batches} ok: got {len(batch_embeddings)} embeddings, dim={len(batch_embeddings[0]) if batch_embeddings else 0}")
 
+        logger.info(f"[Embedding] Total embeddings generated: {len(all_embeddings)}")
         return all_embeddings
 
     async def _embed_local(self, texts: list[str]) -> list[list[float]]:

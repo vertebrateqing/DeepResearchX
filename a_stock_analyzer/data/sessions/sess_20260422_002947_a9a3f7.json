@@ -1,0 +1,107 @@
+{
+  "session_id": "sess_20260422_002947_a9a3f7",
+  "user_id": "anonymous",
+  "created_at": "2026-04-22T00:29:47.669855",
+  "updated_at": "2026-04-22T00:30:48.952284",
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "分析比亚迪002594的2025年财报",
+      "timestamp": "2026-04-22T00:29:47.670085",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "## 市场分析\n\nLLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\n\n---\n\n## 行业推荐\n\nLLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\n\n---\n\n## 公司选取\n\nLLM call failed: Client error '40",
+      "timestamp": "2026-04-22T00:30:48.952220",
+      "metadata": {}
+    }
+  ],
+  "task_stack": [],
+  "completed_tasks": [
+    {
+      "task_id": "c677c69f-0444-49b4-8ede-8d2b5498920d",
+      "task_type": "full_analysis",
+      "success": true,
+      "summary": "{'summary': \"## 市场分析\\n\\nLLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\\n\\n---\\n\\n## 行业推荐\\n\\nLLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\\n\\n---\\n\\n## 公司选取\\n\\nLLM ",
+      "full_result": {
+        "summary": "## 市场分析\n\nLLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\n\n---\n\n## 行业推荐\n\nLLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\n\n---\n\n## 公司选取\n\nLLM call failed: Client error '40"
+      },
+      "completed_at": "2026-04-22T00:30:48.952146"
+    }
+  ],
+  "accumulated_findings": [
+    {
+      "finding_id": "finding_17cb4f49",
+      "source": "market_analysis",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+      "confidence": 0.5,
+      "related_entities": [
+        "A股",
+        "市场"
+      ],
+      "extracted_at": "2026-04-22T00:30:24.556358",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_80a534af",
+      "source": "industry_screening",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+      "confidence": 0.5,
+      "related_entities": [
+        "行业",
+        "投资"
+      ],
+      "extracted_at": "2026-04-22T00:30:24.556369",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_7a90659a",
+      "source": "company_selection",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+      "confidence": 0.5,
+      "related_entities": [
+        "公司",
+        "股票"
+      ],
+      "extracted_at": "2026-04-22T00:30:44.446485",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_97ad2cb2",
+      "source": "financial_rag",
+      "source_ref": "",
+      "content": "LLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+      "confidence": 0.5,
+      "related_entities": [
+        "财报",
+        "财务分析"
+      ],
+      "extracted_at": "2026-04-22T00:30:44.446494",
+      "expires_at": null
+    },
+    {
+      "finding_id": "finding_e23b2d6f",
+      "source": "orchestrator",
+      "source_ref": "",
+      "content": "## 市场分析\n\nLLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\n\n---\n\n## 行业推荐\n\nLLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\n\n---\n\n## 公司选取\n\nLLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\n\n---\n\n## 财报深度分析\n\nLLM call failed: Client error '400 Bad Request' for url 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+      "confidence": 0.7,
+      "related_entities": [],
+      "extracted_at": "2026-04-22T00:30:48.952179",
+      "expires_at": "2026-04-23T00:30:48.952153"
+    }
+  ],
+  "user_preferences": {
+    "investment_style": null,
+    "risk_tolerance": null,
+    "preferred_industries": [],
+    "excluded_industries": [],
+    "time_horizon": "medium",
+    "top_n_default": 10,
+    "favorite_metrics": []
+  },
+  "clarification_state": {}
+}

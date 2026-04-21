@@ -63,10 +63,12 @@ class WebSearchTool(BaseTool):
         max_results: int,
         search_depth: str,
     ) -> dict[str, Any]:
-        """Search using Tavily API."""
+        """Search using Tavily API (wrapped in thread for async compatibility)."""
         try:
+            import asyncio
             client = self._get_tavily_client()
-            response = client.search(
+            response = await asyncio.to_thread(
+                client.search,
                 query=query,
                 max_results=min(max_results, self.settings.max_results),
                 search_depth=search_depth,
