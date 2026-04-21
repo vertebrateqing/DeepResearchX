@@ -237,7 +237,7 @@ class IntentClarifier:
                 content = content.split("```json")[1].split("```")[0]
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0]
-            slots_data = json.loads(content.strip())
+            slots_data = json.loads(content.strip().lstrip('\ufeff'))
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse LLM detection response as JSON: {content[:200]}")
             return []
@@ -389,7 +389,7 @@ class IntentClarifier:
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0]
 
-            data = json.loads(content.strip())
+            data = json.loads(content.strip().lstrip('\ufeff'))
             if data.get("is_confirming"):
                 return {s.slot_name: "__DEFAULT__" for s in pending_slots}
 

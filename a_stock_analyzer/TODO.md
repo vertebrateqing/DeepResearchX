@@ -1,29 +1,56 @@
-# DeepResearch 重构进度
+# DeepResearch PWS 重构进度
 
-## 已完成
-- [x] P0 Bug 修复提交 (commit 80513c0)
+## 已完成的架构改造
 
-## Phase 1: 基础设施 (进行中)
-- [ ] core/finding.py — Finding + Source 结构化中间结果
-- [ ] core/research_plan.py — ResearchPlan + TaskNode + DAGScheduler
-- [ ] core/worker.py — GenericWorker 通用子Agent
-- [ ] core/context_manager.py — TokenBudget + 上下文压缩
+### 核心基础设施 (Phase 1)
+- [x] `core/finding.py` — Finding + Source 结构化中间结果
+- [x] `core/research_plan.py` — ResearchPlan + TaskNode + DAGScheduler (并行调度)
+- [x] `core/worker.py` — GenericWorker 通用子Agent (role-based prompts)
+- [x] `core/context_manager.py` — TokenBudget + 上下文压缩 (synthesizer 层已接入)
 
-## Phase 2: Planner 集成
-- [ ] core/planner.py — ResearchPlanner (plan 生成 + evaluate)
-- [ ] 重写 OrchestratorAgent.run() 为 Planner 模式
+### Planner + Orchestrator (Phase 2)
+- [x] `core/planner.py` — ResearchPlanner (LLM 动态生成 DAG + evaluate 扩展)
+- [x] `core/orchestrator.py` — 重写为 PWS 模式 (消除硬编码 pipeline)
+- [x] `cli.py` — 移除 register_sub_agent，适配新 Orchestrator
+- [x] `config/default.yaml` — 清理旧 agent 配置，更新 orchestrator system_prompt
 
-## Phase 3: Worker 替换
-- [ ] 提取现有 agent 的 system_prompt 为 ROLE_PROMPTS
-- [ ] 删除 agents/market_agent.py, industry_agent.py, company_agent.py
-- [ ] 保留 financial_rag_agent.py 的 RAG pipeline 作为工具
+### 清理旧代码 (Phase 3)
+- [x] 删除 `agents/market_agent.py`, `industry_agent.py`, `company_agent.py`
+- [x] 保留 `agents/financial_rag_agent.py` (独立能力，当前未被 orchestrator 调用)
+- [x] `config/settings.py` — 恢复 agents 配置兼容 skills
 
-## Phase 4: 报告与记忆
-- [ ] Synthesizer 读取所有 Finding 生成报告
-- [ ] 报告标注数据来源和置信度
-- [ ] ContextManager 接入 Planner 和 Worker
+### 报告生成 (Phase 4)
+- [x] `core/report_generator.py` — 适配 PWS role-based sections
 
-## Phase 5: 测试与调优
-- [ ] Planner prompt engineering
-- [ ] Worker role prompt tuning
-- [ ] Token 预算参数调优
+## Bug 修复记录
+
+| 优先级 | 问题 | 修复文件 | 说明 |
+|--------|------|----------|------|
+| P0 | Worker 解析 ReActAgent 输出丢失 JSON | `worker.py:182-193` | 从 `content["answer"]` 提取 JSON，而非消费整个 dict |
+| P1 | `_extract_json_from_text` 括号匹配错误 | `worker.py:201-232` | `rfind` → 栈匹配，正确处理嵌套 JSON 和字符串内括号 |
+| P1 | Failed task 永久阻塞下游依赖 | `research_plan.py:66-73` | `get_ready_tasks()` 将 `failed` 状态视为依赖已满足 |
+| P2 | Report generator section titles 硬编码 | `report_generator.py:114-130,145-155` | 使用 role→中文动态映射 |
+| P2 | Planner evaluate 未使用 findings 参数 | `planner.py:225-226` | 使用传入的 findings 替代 `plan.get_completed_tasks()` |
+| P2 | BOM 导致 JSON 解析失败 | `planner.py:125,271`, `intent_clarifier.py:240,392` | `strip().lstrip('\ufeff')` |
+| P2 | Orchestrator 未使用导入 | `orchestrator.py` | 已清理多余导入 |
+
+## 测试状态
+- [x] 全部 23 个单元测试通过
+- [x] DAGScheduler failed-deps 逻辑验证通过
+- [x] Worker JSON 提取逻辑验证通过
+- [x] Report generator section 渲染验证通过
+
+## 仍存在的问题 / 改进空间
+
+### 未接入的设计（不阻塞运行）
+- [ ] ContextManager 的 `build_planner_context` 和 `build_worker_context` 目前未被使用，仅 synthesizer 层真正生效
+- [ ] 建议未来在 planner.evaluate() 和 worker.execute() 中接入 token budget 控制
+
+### 潜在优化
+- [ ] AKShareTool 内部同步 pandas 调用会阻塞事件循环（当前 max_parallel=3，影响有限）
+- [ ] DuckDuckGo 搜索未包装在 `asyncio.to_thread()` 中
+- [ ] `core/finding.py` 和 `memory/models.py` 存在两个不同的 `Finding` 类，命名易混淆
+
+### 架构演进方向
+- [ ] 可将 `FinancialRAGAgent` 的能力（RAGPipeline + QueryRewriter）作为 tool 提供给 GenericWorker
+- [ ]  skills（market_analysis, industry_screening, company_selection）当前未被 PWS 使用，可作为 Worker 的 optional skills 接入

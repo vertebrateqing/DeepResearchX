@@ -180,7 +180,12 @@ class GenericWorker(ReActAgent):
         # Parse result into Finding
         content = agent_msg.content
         if isinstance(content, dict):
-            raw_result = content
+            # ReActAgent returns {"answer": str, "summary": str}
+            answer = content.get("answer", "")
+            if answer:
+                raw_result = self._extract_json_from_text(answer)
+            else:
+                raw_result = {"summary": content.get("summary", ""), "details": {}}
         elif isinstance(content, str):
             raw_result = self._extract_json_from_text(content)
         else:
@@ -209,18 +214,36 @@ class GenericWorker(ReActAgent):
                 except (IndexError, json.JSONDecodeError):
                     continue
 
-        # Try raw JSON array/object
-        for start_char in ("[", "{"):
+        # Try raw JSON array/object with stack-based bracket matching
+        for start_char in ("{", "["):
             idx = text.find(start_char)
-            if idx != -1:
-                try:
-                    # Find matching end
-                    end_char = "]" if start_char == "[" else "}"
-                    end_idx = text.rfind(end_char)
-                    if end_idx > idx:
-                        return json.loads(text[idx:end_idx + 1])
-                except json.JSONDecodeError:
+            if idx == -1:
+                continue
+            end_char = "}" if start_char == "{" else "]"
+            stack = 0
+            in_string = False
+            escape = False
+            for i, ch in enumerate(text[idx:], start=idx):
+                if escape:
+                    escape = False
                     continue
+                if ch == "\\":
+                    escape = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == start_char:
+                    stack += 1
+                elif ch == end_char:
+                    stack -= 1
+                    if stack == 0:
+                        try:
+                            return json.loads(text[idx:i + 1])
+                        except json.JSONDecodeError:
+                            break
 
         # Fallback: wrap text as summary
         return {

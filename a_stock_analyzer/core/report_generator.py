@@ -111,16 +111,22 @@ class ReportGenerator:
             "- [执行摘要](#执行摘要)",
         ])
 
-        section_titles = {
+        # Role → Chinese title mapping for PWS architecture
+        role_titles = {
+            "web_search": "信息检索",
+            "data_fetch": "数据分析",
+            "doc_analysis": "文档分析",
+            "cross_verify": "交叉验证",
+            "synthesis": "综合结论",
             "market": "市场分析",
             "industry": "行业推荐",
             "company": "公司选取",
             "financial": "财报深度分析",
         }
 
-        for key, title in section_titles.items():
-            if sections.get(key):
-                lines.append(f"- [{title}](#{title})")
+        for key in sections:
+            title = role_titles.get(key, key)
+            lines.append(f"- [{title}](#{title})")
 
         lines.extend([
             "- [免责声明](#免责声明)",
@@ -142,9 +148,10 @@ class ReportGenerator:
         ])
 
         # Individual sections
-        for key, title in section_titles.items():
-            content = sections.get(key, "")
+        for key in sections:
+            content = sections[key]
             if content:
+                title = role_titles.get(key, key)
                 lines.extend([
                     f"## {title}",
                     "",

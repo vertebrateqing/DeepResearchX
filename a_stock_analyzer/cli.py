@@ -5,10 +5,6 @@ import asyncio
 import logging
 import sys
 
-from a_stock_analyzer.agents.company_agent import CompanySelectionAgent
-from a_stock_analyzer.agents.financial_rag_agent import FinancialRAGAgent
-from a_stock_analyzer.agents.industry_agent import IndustryScreeningAgent
-from a_stock_analyzer.agents.market_agent import MarketAnalysisAgent
 from a_stock_analyzer.config.settings import get_settings
 from a_stock_analyzer.core.message import AgentMessage
 from a_stock_analyzer.core.orchestrator import OrchestratorAgent
@@ -35,12 +31,6 @@ async def run_interactive(session_id: str | None = None) -> None:
     setup_logging()
 
     orchestrator = OrchestratorAgent(session_id=session_id)
-
-    # Register sub-agents
-    orchestrator.register_sub_agent(MarketAnalysisAgent())
-    orchestrator.register_sub_agent(IndustryScreeningAgent())
-    orchestrator.register_sub_agent(CompanySelectionAgent())
-    orchestrator.register_sub_agent(FinancialRAGAgent())
 
     print("\n" + "=" * 60)
     print("🤖 A-Stock Analyzer - 交互模式")
@@ -85,10 +75,6 @@ async def run_single(query: str, session_id: str | None = None) -> None:
     setup_logging()
 
     orchestrator = OrchestratorAgent(session_id=session_id)
-    orchestrator.register_sub_agent(MarketAnalysisAgent())
-    orchestrator.register_sub_agent(IndustryScreeningAgent())
-    orchestrator.register_sub_agent(CompanySelectionAgent())
-    orchestrator.register_sub_agent(FinancialRAGAgent())
 
     print(f"\n🔍 分析请求: {query}\n")
     print("=" * 60)

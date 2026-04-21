@@ -64,11 +64,14 @@ class ResearchPlan:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def get_ready_tasks(self) -> list[TaskNode]:
-        """Return tasks whose dependencies are all completed."""
-        completed_ids = {t.task_id for t in self.tasks if t.status == "completed"}
+        """Return tasks whose dependencies are all satisfied (completed or failed)."""
+        satisfied_ids = {
+            t.task_id for t in self.tasks
+            if t.status in ("completed", "failed")
+        }
         return [
             t for t in self.tasks
-            if t.status == "pending" and t.is_ready(completed_ids)
+            if t.status == "pending" and t.is_ready(satisfied_ids)
         ]
 
     def get_completed_tasks(self) -> list[TaskNode]:
