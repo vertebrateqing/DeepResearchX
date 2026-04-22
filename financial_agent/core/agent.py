@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from typing import Any, Optional
 
 import httpx
@@ -111,9 +112,11 @@ class LLMClient:
 
         logger.debug(f"LLM request: {json.dumps(payload, ensure_ascii=False)}")
 
+        t0 = time.perf_counter()
         response = await self.client.post(url, headers=headers, json=payload)
         response.raise_for_status()
         result = response.json()
+        llm_latency = time.perf_counter() - t0
 
         # Normalize Chinese LLM response differences
         result = self._normalize_response(result)
@@ -125,7 +128,8 @@ class LLMClient:
         has_tools = bool(msg.get("tool_calls"))
         content = msg.get("content", "")
         logger.info(
-            f"LLM response: prompt_tokens={usage.get('prompt_tokens', '?')}, "
+            f"LLM response: latency={llm_latency:.2f}s, "
+            f"prompt_tokens={usage.get('prompt_tokens', '?')}, "
             f"completion_tokens={usage.get('completion_tokens', '?')}, "
             f"has_tool_calls={has_tools}, content_len={len(content)}"
         )
@@ -274,7 +278,7 @@ class ReActAgent(BaseAgent):
                     try:
                         result = await self.call_tool(tool_name, tool_args)
                         logger.info(f"Agent {self.name} tool {tool_name} executed")
-                        logger.debug(f"Agent {self.name} tool {tool_name} result: {json.dumps(result, ensure_ascii=False)}")
+                        logger.debug(f"Agent {self.name} tool {tool_name} result: {result[:100]}")
                         run_ctx.add_tool_call(tool_name, tool_args, result)
                     except Exception as e:
                         logger.error(f"Tool {tool_name} failed: {e}")

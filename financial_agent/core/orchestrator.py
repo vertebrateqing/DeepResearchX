@@ -10,6 +10,7 @@ V3 features:
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -175,36 +176,51 @@ class OrchestratorAgent(BaseAgent):
 
         # --- Phase 1: Generate plan ---
         logger.info("[Orchestrator] Phase 1: Generating research plan")
+        t0 = time.perf_counter()
         plan = await self.planner.generate_plan(enriched_query)
-        logger.info(f"[Orchestrator] Plan generated: {len(plan.tasks)} tasks, strategy={plan.strategy}")
+        t1 = time.perf_counter()
+        logger.info(f"[Orchestrator] Phase 1 DONE: plan_gen={t1-t0:.2f}s, tasks={len(plan.tasks)}, strategy={plan.strategy}")
         for t in plan.tasks:
             logger.debug(f"[Orchestrator] Plan task: {t.task_id} role={t.role} deps={t.depends_on} goal={t.goal}")
 
         # --- Phase 2: Execute plan ---
         logger.info("[Orchestrator] Phase 2: Executing research plan")
+        t0 = time.perf_counter()
         self._current_plan = plan.tasks
         findings = await self.scheduler.execute(
             plan,
             worker_factory=self._create_worker,
         )
+        t1 = time.perf_counter()
+        logger.info(f"[Orchestrator] Phase 2 DONE: scheduler_exec={t1-t0:.2f}s, findings={len(findings)}")
 
         # --- Phase 3: Evaluate and optionally extend ---
         logger.info(f"[Orchestrator] Phase 3: Evaluating {len(findings)} findings")
+        t0 = time.perf_counter()
         plan_update = await self.planner.evaluate(plan, findings)
+        t1 = time.perf_counter()
+        eval_time = t1 - t0
 
         if not plan_update.is_complete and plan_update.new_tasks:
             logger.info(f"[Orchestrator] Extending plan with {len(plan_update.new_tasks)} new tasks")
+            t0 = time.perf_counter()
             plan.tasks.extend(plan_update.new_tasks)
             additional_findings = await self.scheduler.execute(
                 plan,
                 worker_factory=self._create_worker,
             )
             findings.extend(additional_findings)
+            t1 = time.perf_counter()
+            logger.info(f"[Orchestrator] Phase 3 extended: eval={eval_time:.2f}s, extended_exec={t1-t0:.2f}s")
+        else:
+            logger.info(f"[Orchestrator] Phase 3 DONE: eval={eval_time:.2f}s, no extension needed")
 
         # --- Phase 4: Synthesize report ---
         logger.info("[Orchestrator] Phase 4: Synthesizing report")
         logger.debug(f"[Orchestrator] Synthesizer input: {len(findings)} findings, query={original_query}")
+        t0 = time.perf_counter()
         final_report = await self._synthesize_from_findings(original_query, findings)
+        logger.info(f"[Orchestrator] Phase 4 DONE: synthesis={time.perf_counter()-t0:.2f}s, report_len={len(final_report)}")
 
         # --- Phase 5: Generate and save report ---
         sections = self._build_sections(findings)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -141,6 +142,7 @@ class DAGScheduler:
             List of all successful findings.
         """
         logger.info(f"[Scheduler] Starting plan {plan.plan_id} with {len(plan.tasks)} tasks, max_parallel={self.max_parallel}")
+        total_t0 = time.perf_counter()
         round_num = 0
 
         while not plan.is_complete():
@@ -165,10 +167,13 @@ class DAGScheduler:
                 t.status = "running"
 
             # Execute batch in parallel
+            batch_t0 = time.perf_counter()
             results = await asyncio.gather(
                 *[self._run_task(t, worker_factory) for t in batch],
                 return_exceptions=True,
             )
+            batch_latency = time.perf_counter() - batch_t0
+            logger.info(f"[Scheduler] Round {round_num} completed in {batch_latency:.2f}s for tasks {[t.task_id for t in batch]}")
 
             # Process results
             for task, result in zip(batch, results):
@@ -187,8 +192,12 @@ class DAGScheduler:
                     task.error_message = ""
                     logger.info(f"[Scheduler] Task {task.task_id} completed: {result.summary}")
 
+        total_latency = time.perf_counter() - total_t0
         findings = plan.get_findings()
-        logger.info(f"[Scheduler] Plan {plan.plan_id} finished: {len(findings)}/{len(plan.tasks)} tasks succeeded")
+        logger.info(
+            f"[Scheduler] Plan {plan.plan_id} finished in {total_latency:.2f}s: "
+            f"{len(findings)}/{len(plan.tasks)} tasks succeeded, rounds={round_num}"
+        )
         return findings
 
     async def _run_task(

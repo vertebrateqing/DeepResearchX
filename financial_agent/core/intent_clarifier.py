@@ -8,6 +8,7 @@ if LLM is unavailable.
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -104,6 +105,8 @@ class ClarificationResult:
                     merged = f"{merged}（投资风格：{val}）"
                 elif slot.slot_name == "time_horizon":
                     merged = f"{merged}（时间维度：{val}）"
+                elif slot.slot_name == "analysis_target":
+                    merged = f"请分析{val}：{merged}"
                 else:
                     merged = f"{merged} [{slot.slot_name}: {val}]"
         self.merged_query = merged
@@ -137,7 +140,9 @@ class IntentClarifier:
         rounds_completed = len(history)
 
         # LLM-based detection with retry
+        t0 = time.perf_counter()
         missing_slots = await self._detect_with_retry(query)
+        logger.info(f"[IntentClarifier] Detection completed in {time.perf_counter()-t0:.2f}s, slots={len(missing_slots)}, query={query[:50]}...")
 
         if not missing_slots:
             return ClarificationResult(
@@ -198,7 +203,31 @@ class IntentClarifier:
         from datetime import datetime
         today = datetime.now().strftime("%Y年%m月%d日")
 
-        prompt = f"""分析以下用户请求，判断是否有**信息缺失或存在歧义**（如信息不完整、指代不明）。
+        # Heuristic pre-check for extremely vague queries
+        stripped = query.strip()
+        has_financial_keyword = any(kw in stripped for kw in [
+            "股票", "财报", "分析", "推荐", "行业", "公司", "基金", "债券", "指数",
+            "茅台", "比亚迪", "腾讯", "阿里", "华为", "苹果", "特斯拉",
+            "600", "601", "000", "002", "300", "688",
+            "牛市", "熊市", "涨跌", "涨停", "跌停", "PE", "PB", "ROE",
+            "投资", "买入", "卖出", "持仓", "仓位", "市值", "估值",
+        ])
+        has_temporal = any(kw in stripped for kw in [
+            "20", "年", "季度", "Q1", "Q2", "Q3", "Q4", "去年", "今年", "明年", "最近", "最新", "一期",
+        ])
+        # If query is very short AND lacks both financial keywords and temporal info, it's likely vague
+        if len(stripped) < 8 and not has_financial_keyword and not has_temporal:
+            logger.info(f"[IntentClarifier] Query '{stripped}' is too vague, forcing clarification")
+            return [
+                MissingSlot(
+                    slot_name="analysis_target",
+                    slot_type="string",
+                    question="您想分析什么内容？（如：某只股票、某个行业、或市场大盘）",
+                    default_value="A股市场整体",
+                ),
+            ]
+
+        prompt = f"""分析以下用户请求，判断是否有**信息缺失或存在歧义**（如信息不完整、指代不明、目标不清晰）。
 
 【当前真实日期】{today}
 
@@ -211,13 +240,21 @@ class IntentClarifier:
 - **公司歧义判断标准**：只有简称确实可能指代多家**不同**公司时才视为歧义。例如"华能"可能指华能国际或华能水电，这算歧义；但"腾讯""茅台""比亚迪"这种市场知名度极高、几乎无歧义的名称，不算歧义，不要返回。
 - 如果用户请求中已经包含明确的股票代码（如600519、002594），不要询问公司名称。
 - 如果用户请求中包含"202X年"等明确时间信息，不要询问年份。
+- **分析目标缺失判断标准**：如果用户请求没有提到任何具体的分析对象（如没提公司名称、没提行业名称、没提股票代码、没提市场指数等），只说了"帮我看看""分析一下""推荐一下"这类泛泛的话，必须视为缺失，返回 analysis_target。
 
 请检查以下方面：
-1. 是否完全缺少时间信息（没有任何年份、季度、相对时间词如"去年/今年"）
-2. 公司名称是否可能有歧义（如简称可能对应多家公司）——注意判断标准，不要对知名公司过度敏感
-3. 投资偏好是否未明确
-4. 时间维度是否未指定
-5. 数量要求是否未明确
+1. 是否缺少分析目标/主题（如用户只说"分析一下""帮我看看"，没有任何具体对象）
+2. 是否完全缺少时间信息（没有任何年份、季度、相对时间词如"去年/今年"）
+3. 公司名称是否可能有歧义（如简称可能对应多家公司）——注意判断标准，不要对知名公司过度敏感
+4. 投资偏好是否未明确
+5. 时间维度是否未指定
+6. 数量要求是否未明确
+
+【示例】
+- 用户"帮我看看" → 缺少分析目标，返回 analysis_target
+- 用户"分析一下" → 缺少分析目标，返回 analysis_target
+- 用户"比亚迪2025年财报" → 无缺失，返回 []
+- 用户"推荐几只股票" → 无缺失（目标明确），返回 []
 
 如果有缺失，以JSON格式返回：
 [{{"slot_name": "缺失项名称", "question": "向用户确认的问题（20字以内）", "default_value": "默认值"}}]

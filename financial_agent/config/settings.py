@@ -79,9 +79,19 @@ class WebSearchConfig(BaseSettings):
     max_results: int = 10
 
 
+class WebScraperConfig(BaseSettings):
+    enabled: bool = True
+    timeout: int = 30
+    concurrency: int = 5
+    max_pages: int = 10
+    chunk_size: int = 512
+    chunk_overlap: int = 64
+
+
 class DataSourcesConfig(BaseSettings):
     akshare: AKShareConfig = Field(default_factory=AKShareConfig)
     web_search: WebSearchConfig = Field(default_factory=WebSearchConfig)
+    web_scraper: WebScraperConfig = Field(default_factory=WebScraperConfig)
 
 
 class AgentConfig(BaseSettings):

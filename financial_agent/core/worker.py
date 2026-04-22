@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Optional
 
 from financial_agent.config.settings import get_settings
@@ -135,10 +136,13 @@ class GenericWorker(ReActAgent):
 3. sources 必须真实，只列出你实际使用的来源
 4. confidence 用 0-1 表示你对结论的信心程度
 """
+        # Lazy import to avoid circular dependency
+        from financial_agent.tools.web_scraper import WebScraperTool
+
         super().__init__(
             name=f"worker_{task.task_id}",
             system_prompt=system_prompt,
-            tools=tools or [AKShareTool(), WebSearchTool()],
+            tools=tools or [AKShareTool(), WebSearchTool(), WebScraperTool()],
             skills=skills,
             model=model or get_settings().llm.model,
             max_iterations=max_iterations,
@@ -197,8 +201,10 @@ class GenericWorker(ReActAgent):
         logger.debug(f"[Worker {self.task.task_id}] Prompt length={len(user_input)} chars, deps={list(dependency_inputs.keys())}")
 
         # Run ReAct loop
+        t0 = time.perf_counter()
         agent_msg: AgentMessage = await self.run(user_input, context=None)
-        logger.debug(f"[Worker {self.task.task_id}] ReAct completed, content type={type(agent_msg.content).__name__}")
+        worker_latency = time.perf_counter() - t0
+        logger.info(f"[Worker {self.task.task_id}] ReAct completed in {worker_latency:.2f}s, content type={type(agent_msg.content).__name__}")
 
         # Parse result into Finding
         content = agent_msg.content

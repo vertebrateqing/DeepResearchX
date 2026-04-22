@@ -96,6 +96,13 @@ data_sources:
     provider: tavily  # tavily / duckduckgo
     api_key: ${TAVILY_API_KEY}
     max_results: 10
+  web_scraper:
+    enabled: true
+    timeout: 30
+    concurrency: 5
+    max_pages: 10
+    chunk_size: 512
+    chunk_overlap: 64
 
 # Agent配置
 # 注意: agents.*.model 可覆盖全局 llm.model

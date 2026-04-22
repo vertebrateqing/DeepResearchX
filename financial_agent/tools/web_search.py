@@ -1,6 +1,8 @@
 """Web search tools for gathering market information."""
 
+import json
 import logging
+import time
 from typing import Any, Optional
 
 from financial_agent.config.settings import get_settings
@@ -10,10 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 class WebSearchTool(BaseTool):
-    """Tool for web search using Tavily or DuckDuckGo."""
+    """Tool for web search using Tavily or DuckDuckGo.
+
+    When scraping is enabled, also fetches full page content from
+    result URLs and returns the most relevant text chunks.
+    """
 
     name = "web_search"
-    description = "搜索互联网获取最新的市场信息、行业动态、公司新闻等。适用于获取实时数据和最新资讯。"
+    description = "搜索互联网获取最新的市场信息、行业动态、公司新闻等。适用于获取实时数据和最新资讯。支持抓取搜索结果网页全文并按相关性过滤。"
     parameters = {
         "query": {
             "type": "string",
@@ -29,11 +35,18 @@ class WebSearchTool(BaseTool):
             "description": "搜索深度: basic 或 advanced",
             "default": "advanced",
         },
+        "scrape": {
+            "type": "boolean",
+            "description": "是否抓取搜索结果网页全文",
+            "default": True,
+        },
     }
 
     def __init__(self) -> None:
         self.settings = get_settings().data_sources.web_search
+        self.scraper_settings = get_settings().data_sources.web_scraper
         self._tavily_client: Optional[Any] = None
+        self._scraper: Optional[Any] = None
 
     def _get_tavily_client(self) -> Any:
         if self._tavily_client is None:
@@ -45,17 +58,53 @@ class WebSearchTool(BaseTool):
                 raise ImportError("tavily-python is required for Tavily search")
         return self._tavily_client
 
+    def _get_scraper(self) -> Any:
+        if self._scraper is None:
+            from financial_agent.tools.web_scraper import WebScraperTool
+
+            self._scraper = WebScraperTool()
+        return self._scraper
+
     async def execute(
         self,
         query: str,
         max_results: int = 10,
         search_depth: str = "advanced",
+        scrape: bool = True,
     ) -> dict[str, Any]:
-        """Execute web search."""
+        """Execute web search, optionally scraping result URLs."""
         if self.settings.provider == "tavily":
-            return await self._search_tavily(query, max_results, search_depth)
+            result = await self._search_tavily(query, max_results, search_depth)
         else:
-            return await self._search_duckduckgo(query, max_results)
+            result = await self._search_duckduckgo(query, max_results)
+
+        # Scrape result URLs if enabled
+        should_scrape = scrape and self.scraper_settings.enabled
+        if should_scrape and result.get("results"):
+            urls = [r["url"] for r in result["results"] if r.get("url")]
+            if urls:
+                try:
+                    scraper = self._get_scraper()
+                    scraped = await scraper.execute(
+                        urls=urls[: self.scraper_settings.max_pages],
+                        query=query,
+                        top_k=self.scraper_settings.max_pages,
+                        chunk_size=self.scraper_settings.chunk_size,
+                        chunk_overlap=self.scraper_settings.chunk_overlap,
+                    )
+                    result["scraped_chunks"] = scraped.get("chunks", [])
+                    result["scraped_total_chunks"] = scraped.get("total_chunks", 0)
+                    logger.info(
+                        f"[WebSearch] Scraped {scraped.get('total_chunks', 0)} chunks "
+                        f"from {len(scraped.get('pages', []))} pages, "
+                        f"returned {len(scraped.get('chunks', []))} top-k"
+                    )
+                except Exception as e:
+                    logger.warning(f"[WebSearch] URL scraping failed: {e}")
+                    result["scraped_chunks"] = []
+                    result["scraped_total_chunks"] = 0
+
+        return result
 
     async def _search_tavily(
         self,
@@ -67,6 +116,7 @@ class WebSearchTool(BaseTool):
         try:
             import asyncio
             client = self._get_tavily_client()
+            t0 = time.perf_counter()
             response = await asyncio.to_thread(
                 client.search,
                 query=query,
@@ -74,6 +124,7 @@ class WebSearchTool(BaseTool):
                 search_depth=search_depth,
                 include_answer=True,
             )
+            latency = time.perf_counter() - t0
 
             results = []
             for result in response.get("results", []):
@@ -84,6 +135,7 @@ class WebSearchTool(BaseTool):
                     "score": result.get("score", 0),
                 })
 
+            logger.info(f"[WebSearch] Tavily search latency={latency:.2f}s, results={len(results)}, query={query[:50]}...")
             logger.debug(f"[WebSearch] Tavily raw response: {json.dumps(response, ensure_ascii=False)}")
             return {
                 "query": query,
@@ -114,7 +166,10 @@ class WebSearchTool(BaseTool):
                         })
                     return results
 
+            t0 = time.perf_counter()
             results = await asyncio.to_thread(_do_search)
+            latency = time.perf_counter() - t0
+            logger.info(f"[WebSearch] DuckDuckGo search latency={latency:.2f}s, results={len(results)}, query={query[:50]}...")
             return {
                 "query": query,
                 "provider": "duckduckgo",

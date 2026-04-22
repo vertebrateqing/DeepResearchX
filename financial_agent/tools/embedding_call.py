@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 from typing import Any, Optional
 
 import httpx
@@ -95,13 +96,15 @@ class EmbeddingTool(BaseTool):
             }
 
             logger.debug(f"[Embedding] Batch {i // batch_size + 1}/{total_batches}: {len(batch)} texts")
+            t0 = time.perf_counter()
             response = await self.client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             result = response.json()
+            latency = time.perf_counter() - t0
 
             batch_embeddings = [item["embedding"] for item in result["data"]]
             all_embeddings.extend(batch_embeddings)
-            logger.info(f"[Embedding] Batch {i // batch_size + 1}/{total_batches} ok: got {len(batch_embeddings)} embeddings, dim={len(batch_embeddings[0]) if batch_embeddings else 0}")
+            logger.info(f"[Embedding] Batch {i // batch_size + 1}/{total_batches} ok: latency={latency:.2f}s, got {len(batch_embeddings)} embeddings, dim={len(batch_embeddings[0]) if batch_embeddings else 0}")
 
         logger.info(f"[Embedding] Total embeddings generated: {len(all_embeddings)}")
         return all_embeddings
@@ -120,18 +123,23 @@ class EmbeddingTool(BaseTool):
                 except Exception:
                     device = "cpu"
 
+            logger.info(f"[Embedding] Loading local model: {model_path} on {device}")
+            t0 = time.perf_counter()
             try:
                 self._local_model = SentenceTransformer(model_path, device=device)
             except Exception as e:
                 logger.warning(f"[Embedding] Failed to load model on {device}: {e}, falling back to CPU")
                 self._local_model = SentenceTransformer(model_path, device="cpu")
+            logger.info(f"[Embedding] Model loaded in {time.perf_counter() - t0:.2f}s")
 
+        t0 = time.perf_counter()
         embeddings = self._local_model.encode(
             texts,
             batch_size=self.settings.batch_size,
             show_progress_bar=False,
             convert_to_numpy=True,
         )
+        logger.info(f"[Embedding] Local encode {len(texts)} texts in {time.perf_counter() - t0:.2f}s")
         return embeddings.tolist()
 
     async def close(self) -> None:

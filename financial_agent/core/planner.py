@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from datetime import datetime
 from typing import Any
@@ -99,19 +100,20 @@ class ResearchPlanner:
             {"role": "user", "content": prompt},
         ]
 
+        t0 = time.perf_counter()
         for attempt in range(self.MAX_PLAN_RETRIES + 1):
             try:
                 response = await self.llm.chat(messages=messages, model=self.model)
                 content = response["choices"][0]["message"].get("content", "")
                 plan = self._parse_plan(content, user_query)
                 if plan:
-                    logger.info(f"[Planner] Generated plan with {len(plan.tasks)} tasks")
+                    logger.info(f"[Planner] Generated plan with {len(plan.tasks)} tasks in {time.perf_counter()-t0:.2f}s")
                     return plan
             except Exception as e:
                 logger.warning(f"[Planner] Plan generation attempt {attempt + 1} failed: {e}")
 
         # Fallback: create a minimal single-task plan
-        logger.error("[Planner] Failed to generate plan, using fallback")
+        logger.error(f"[Planner] Failed to generate plan after {time.perf_counter()-t0:.2f}s, using fallback")
         return self._fallback_plan(user_query)
 
     def _parse_plan(self, content: str, user_query: str) -> ResearchPlan | None:
@@ -176,9 +178,8 @@ class ResearchPlanner:
 
         # Topological sort (Kahn's algorithm)
         in_degree = {t: 0 for t in task_ids}
-        for deps in graph.values():
-            for dep in deps:
-                in_degree[dep] = in_degree.get(dep, 0) + 1
+        for task_id, deps in graph.items():
+            in_degree[task_id] = len(deps)
 
         queue = [t for t, d in in_degree.items() if d == 0]
         visited = 0
@@ -245,6 +246,7 @@ class ResearchPlanner:
 
 只输出JSON，不要解释。"""
 
+        t0 = time.perf_counter()
         for attempt in range(self.MAX_EVAL_RETRIES + 1):
             try:
                 response = await self.llm.chat(
@@ -255,11 +257,14 @@ class ResearchPlanner:
                     model=self.model,
                 )
                 content = response["choices"][0]["message"].get("content", "")
-                return self._parse_evaluation(content, plan)
+                result = self._parse_evaluation(content, plan)
+                logger.info(f"[Planner] Evaluation done in {time.perf_counter()-t0:.2f}s: complete={result.is_complete}")
+                return result
             except Exception as e:
                 logger.warning(f"[Planner] Evaluation attempt {attempt + 1} failed: {e}")
 
         # Fallback: assume complete if we have findings
+        logger.info(f"[Planner] Evaluation failed after {time.perf_counter()-t0:.2f}s, assuming complete")
         return PlanUpdate(is_complete=True, reason="Evaluation failed, assuming complete")
 
     def _parse_evaluation(self, content: str, plan: ResearchPlan) -> PlanUpdate:
