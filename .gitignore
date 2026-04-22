@@ -39,14 +39,14 @@ ENV/
 .env.*.local
 
 # Data directories
-a_stock_analyzer/data/raw/*
-a_stock_analyzer/data/processed/*
-a_stock_analyzer/data/vector_db/*
-a_stock_analyzer/data/output/*
-a_stock_analyzer/data/sessions/*
-!a_stock_analyzer/data/raw/.gitkeep
-!a_stock_analyzer/data/processed/.gitkeep
-!a_stock_analyzer/data/vector_db/.gitkeep
+financial_agent/data/raw/*
+financial_agent/data/processed/*
+financial_agent/data/vector_db/*
+financial_agent/data/output/*
+financial_agent/data/sessions/*
+!financial_agent/data/raw/.gitkeep
+!financial_agent/data/processed/.gitkeep
+!financial_agent/data/vector_db/.gitkeep
 
 # Logs
 *.log

@@ -24,7 +24,7 @@
 ## 项目结构
 
 ```
-a_stock_analyzer/
+financial_agent/
 ├── config/          # 配置管理
 ├── core/            # Agent核心框架
 ├── agents/          # Agent实现
@@ -54,7 +54,7 @@ cp .env.example .env
 ### 运行分析
 
 ```bash
-python -m a_stock_analyzer
+python -m financial_agent
 ```
 
 ## License
