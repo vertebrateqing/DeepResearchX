@@ -59,6 +59,7 @@ class AKShareTool(BaseTool):
         limit: int = 20,
     ) -> dict[str, Any]:
         """Execute AKShare data fetch."""
+        logger.info(f"[AKShareTool] data_type={data_type}, symbol={symbol}, industry={industry}, limit={limit}")
         try:
             if data_type == "stock_spot":
                 return await self._get_stock_spot(symbol, limit)
@@ -76,6 +77,9 @@ class AKShareTool(BaseTool):
                 return await self._get_industry_stocks(industry, limit)
             else:
                 return {"error": f"Unknown data_type: {data_type}"}
+            result = {"error": f"Unknown data_type: {data_type}"}
+            logger.debug(f"[AKShareTool] result: {json.dumps(result, ensure_ascii=False)}")
+            return result
         except Exception as e:
             logger.error(f"AKShare fetch failed: {e}")
             return {"error": str(e), "data_type": data_type}

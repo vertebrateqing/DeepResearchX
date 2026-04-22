@@ -254,7 +254,7 @@ class RAGPipeline:
 
         logger.info(
             f"[RAGPipeline] Query variants: {len(queries)}, "
-            f"merged unique docs: {len(results)} for original query: {query[:50]}..."
+            f"merged unique docs: {len(results)} for original query: {query}"
         )
 
         # Rerank if enabled

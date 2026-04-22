@@ -163,6 +163,7 @@ class OrchestratorAgent(BaseAgent):
         enriched_query = f"{date_context}\n\n{merged_query}"
 
         logger.info(f"[Orchestrator] Starting deepresearch for: {enriched_query[:100]}...")
+        logger.debug(f"[Orchestrator] Full enriched query: {enriched_query}")
         self.context_manager.reset()
 
         # Record main task
@@ -176,6 +177,8 @@ class OrchestratorAgent(BaseAgent):
         logger.info("[Orchestrator] Phase 1: Generating research plan")
         plan = await self.planner.generate_plan(enriched_query)
         logger.info(f"[Orchestrator] Plan generated: {len(plan.tasks)} tasks, strategy={plan.strategy}")
+        for t in plan.tasks:
+            logger.debug(f"[Orchestrator] Plan task: {t.task_id} role={t.role} deps={t.depends_on} goal={t.goal[:60]}")
 
         # --- Phase 2: Execute plan ---
         logger.info("[Orchestrator] Phase 2: Executing research plan")
@@ -200,6 +203,7 @@ class OrchestratorAgent(BaseAgent):
 
         # --- Phase 4: Synthesize report ---
         logger.info("[Orchestrator] Phase 4: Synthesizing report")
+        logger.debug(f"[Orchestrator] Synthesizer input: {len(findings)} findings, query={original_query[:100]}")
         final_report = await self._synthesize_from_findings(original_query, findings)
 
         # --- Phase 5: Generate and save report ---

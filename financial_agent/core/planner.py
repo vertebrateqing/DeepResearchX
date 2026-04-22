@@ -124,7 +124,7 @@ class ResearchPlanner:
                 content = content.split("```")[1].split("```")[0]
             data = json.loads(content.strip().lstrip('\ufeff'))
         except (json.JSONDecodeError, IndexError):
-            logger.warning(f"[Planner] Failed to parse plan JSON: {content[:200]}")
+            logger.warning(f"[Planner] Failed to parse plan JSON: {content}")
             return None
 
         if not isinstance(data, dict) or "tasks" not in data:
@@ -217,6 +217,7 @@ class ResearchPlanner:
         Returns PlanUpdate with new tasks if more research is needed.
         """
         if not findings:
+            logger.debug("[Planner] Evaluate: no findings yet")
             return PlanUpdate(is_complete=False, reason="No findings yet")
 
         # Build evaluation context
@@ -270,7 +271,7 @@ class ResearchPlanner:
                 content = content.split("```")[1].split("```")[0]
             data = json.loads(content.strip().lstrip('\ufeff'))
         except (json.JSONDecodeError, IndexError):
-            logger.warning(f"[Planner] Failed to parse evaluation: {content[:200]}")
+            logger.warning(f"[Planner] Failed to parse evaluation: {content}")
             return PlanUpdate(is_complete=True, reason="Parse failed")
 
         is_complete = data.get("is_complete", True)

@@ -186,7 +186,7 @@ class GenericWorker(ReActAgent):
                     prompt_parts.append(finding.to_planner_context())
                     if finding.details:
                         details_json = json.dumps(finding.details, ensure_ascii=False, indent=2)
-                        prompt_parts.append(f"详细数据: {details_json[:2000]}")
+                        prompt_parts.append(f"详细数据: {details_json}")
 
             prompt_parts.append(
                 "\n请完成上述任务，并在最终回答中输出符合要求的 JSON 格式结果。"
@@ -194,9 +194,11 @@ class GenericWorker(ReActAgent):
             user_input = "\n".join(prompt_parts)
 
         logger.info(f"[Worker {self.task.task_id}] Executing role={self.task.role}, goal={self.task.goal[:60]}...")
+        logger.debug(f"[Worker {self.task.task_id}] Prompt length={len(user_input)} chars, deps={list(dependency_inputs.keys())}")
 
         # Run ReAct loop
         agent_msg: AgentMessage = await self.run(user_input, context=None)
+        logger.debug(f"[Worker {self.task.task_id}] ReAct completed, content type={type(agent_msg.content).__name__}")
 
         # Parse result into Finding
         content = agent_msg.content
@@ -210,7 +212,7 @@ class GenericWorker(ReActAgent):
         elif isinstance(content, str):
             raw_result = self._extract_json_from_text(content)
         else:
-            raw_result = {"summary": str(content)[:200], "details": {}}
+            raw_result = {"summary": str(content), "details": {}}
 
         finding = Finding.from_agent_result(
             task_id=self.task.task_id,
@@ -268,7 +270,7 @@ class GenericWorker(ReActAgent):
 
         # Fallback: wrap text as summary
         return {
-            "summary": text[:500] + "..." if len(text) > 500 else text,
+            "summary": text,
             "details": {"raw_text": text},
             "sources": [],
             "confidence": 0.5,

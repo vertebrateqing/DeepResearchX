@@ -230,6 +230,7 @@ class IntentClarifier:
         ]
         response = await self.llm.chat(messages=messages)
         content = response["choices"][0]["message"].get("content", "[]")
+        logger.debug(f"[IntentClarifier] LLM raw detection response: {content}")
 
         # Extract JSON
         try:
@@ -239,7 +240,7 @@ class IntentClarifier:
                 content = content.split("```")[1].split("```")[0]
             slots_data = json.loads(content.strip().lstrip('\ufeff'))
         except json.JSONDecodeError:
-            logger.warning(f"Failed to parse LLM detection response as JSON: {content[:200]}")
+            logger.warning(f"Failed to parse LLM detection response as JSON: {content}")
             return []
 
         if not isinstance(slots_data, list):
@@ -255,6 +256,7 @@ class IntentClarifier:
                 default_value=slot_data.get("default_value"),
             ))
 
+        logger.debug(f"[IntentClarifier] Detected {len(missing)} missing slots")
         return missing
 
     def generate_clarification_prompt(self, result: ClarificationResult) -> str:

@@ -126,6 +126,6 @@ output:
 
 # 日志配置
 logging:
-  level: INFO
-  format: json  # json / console
+  level: DEBUG  # 测试开发阶段打全日志，生产环境可改为 INFO
+  format: console  # json / console，开发阶段用 console 更易读
   file: null  # 日志文件路径，null则只输出到控制台

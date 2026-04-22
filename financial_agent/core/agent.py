@@ -109,7 +109,7 @@ class LLMClient:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
-        logger.debug(f"LLM request: {json.dumps(payload, ensure_ascii=False)[:500]}")
+        logger.debug(f"LLM request: {json.dumps(payload, ensure_ascii=False)}")
 
         response = await self.client.post(url, headers=headers, json=payload)
         response.raise_for_status()
@@ -123,14 +123,16 @@ class LLMClient:
         choices = result.get("choices", [])
         msg = choices[0].get("message", {}) if choices else {}
         has_tools = bool(msg.get("tool_calls"))
-        content_preview = msg.get("content", "")[:200] if msg else ""
+        content = msg.get("content", "")
         logger.info(
             f"LLM response: prompt_tokens={usage.get('prompt_tokens', '?')}, "
             f"completion_tokens={usage.get('completion_tokens', '?')}, "
-            f"has_tool_calls={has_tools}, content_len={len(msg.get('content', ''))}, "
-            f"content_preview={content_preview[:120]!r}"
+            f"has_tool_calls={has_tools}, content_len={len(content)}"
         )
-        logger.debug(f"LLM response full: {json.dumps(result, ensure_ascii=False)[:800]}")
+        # Log full response content and reasoning without truncation
+        logger.debug(f"LLM response full: {json.dumps(result, ensure_ascii=False)}")
+        if content:
+            logger.debug(f"LLM content: {content}")
         return result
 
     def _normalize_response(self, result: dict[str, Any]) -> dict[str, Any]:
@@ -242,6 +244,11 @@ class ReActAgent(BaseAgent):
 
             choice = response["choices"][0]
             message = choice["message"]
+            msg_content = message.get("content", "")
+
+            # Log LLM thinking / reasoning output without truncation
+            if msg_content:
+                logger.debug(f"Agent {self.name} iteration {iteration + 1} thinking: {msg_content}")
 
             # Check for tool calls
             tool_calls = message.get("tool_calls", [])
@@ -251,7 +258,7 @@ class ReActAgent(BaseAgent):
                 # Add assistant message with tool calls
                 messages.append({
                     "role": "assistant",
-                    "content": message.get("content", ""),
+                    "content": msg_content,
                     "tool_calls": tool_calls,
                 })
 
@@ -261,12 +268,13 @@ class ReActAgent(BaseAgent):
                     tool_name = function["name"]
                     tool_args = json.loads(function["arguments"])
 
-                    logger.info(f"Agent {self.name} calling tool: {tool_name}, args={json.dumps(tool_args, ensure_ascii=False)[:200]}")
+                    logger.info(f"Agent {self.name} calling tool: {tool_name}")
+                    logger.debug(f"Agent {self.name} tool args: {json.dumps(tool_args, ensure_ascii=False)}")
 
                     try:
                         result = await self.call_tool(tool_name, tool_args)
-                        result_summary = json.dumps(result, ensure_ascii=False)[:300]
-                        logger.info(f"Agent {self.name} tool {tool_name} result: {result_summary}")
+                        logger.info(f"Agent {self.name} tool {tool_name} executed")
+                        logger.debug(f"Agent {self.name} tool {tool_name} result: {json.dumps(result, ensure_ascii=False)}")
                         run_ctx.add_tool_call(tool_name, tool_args, result)
                     except Exception as e:
                         logger.error(f"Tool {tool_name} failed: {e}")

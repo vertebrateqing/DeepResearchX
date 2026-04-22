@@ -84,6 +84,7 @@ class WebSearchTool(BaseTool):
                     "score": result.get("score", 0),
                 })
 
+            logger.debug(f"[WebSearch] Tavily raw response: {json.dumps(response, ensure_ascii=False)}")
             return {
                 "query": query,
                 "provider": "tavily",

@@ -185,7 +185,7 @@ class DAGScheduler:
                     task.status = "completed"
                     task.output = result
                     task.error_message = ""
-                    logger.info(f"[Scheduler] Task {task.task_id} completed: {result.summary[:80]}...")
+                    logger.info(f"[Scheduler] Task {task.task_id} completed: {result.summary}")
 
         findings = plan.get_findings()
         logger.info(f"[Scheduler] Plan {plan.plan_id} finished: {len(findings)}/{len(plan.tasks)} tasks succeeded")
