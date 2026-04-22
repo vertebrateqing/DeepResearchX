@@ -1,5 +1,7 @@
 """Embedding generation tool."""
 
+import logging
+import os
 from typing import Any, Optional
 
 import httpx
@@ -7,6 +9,12 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from financial_agent.config.settings import get_settings
 from financial_agent.core.base import BaseTool
+
+logger = logging.getLogger(__name__)
+
+# Use HF-Mirror for China users if not explicitly configured
+if not os.environ.get("HF_ENDPOINT"):
+    os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 
 class EmbeddingTool(BaseTool):
@@ -106,11 +114,17 @@ class EmbeddingTool(BaseTool):
             model_path = self.settings.local_model_path or "BAAI/bge-large-zh-v1.5"
             device = self.settings.device
             if device == "auto":
-                import torch
+                try:
+                    import torch
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                except Exception:
+                    device = "cpu"
 
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-
-            self._local_model = SentenceTransformer(model_path, device=device)
+            try:
+                self._local_model = SentenceTransformer(model_path, device=device)
+            except Exception as e:
+                logger.warning(f"[Embedding] Failed to load model on {device}: {e}, falling back to CPU")
+                self._local_model = SentenceTransformer(model_path, device="cpu")
 
         embeddings = self._local_model.encode(
             texts,

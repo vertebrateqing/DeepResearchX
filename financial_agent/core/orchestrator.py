@@ -178,7 +178,7 @@ class OrchestratorAgent(BaseAgent):
         plan = await self.planner.generate_plan(enriched_query)
         logger.info(f"[Orchestrator] Plan generated: {len(plan.tasks)} tasks, strategy={plan.strategy}")
         for t in plan.tasks:
-            logger.debug(f"[Orchestrator] Plan task: {t.task_id} role={t.role} deps={t.depends_on} goal={t.goal[:60]}")
+            logger.debug(f"[Orchestrator] Plan task: {t.task_id} role={t.role} deps={t.depends_on} goal={t.goal}")
 
         # --- Phase 2: Execute plan ---
         logger.info("[Orchestrator] Phase 2: Executing research plan")
@@ -203,7 +203,7 @@ class OrchestratorAgent(BaseAgent):
 
         # --- Phase 4: Synthesize report ---
         logger.info("[Orchestrator] Phase 4: Synthesizing report")
-        logger.debug(f"[Orchestrator] Synthesizer input: {len(findings)} findings, query={original_query[:100]}")
+        logger.debug(f"[Orchestrator] Synthesizer input: {len(findings)} findings, query={original_query}")
         final_report = await self._synthesize_from_findings(original_query, findings)
 
         # --- Phase 5: Generate and save report ---
@@ -289,7 +289,7 @@ class OrchestratorAgent(BaseAgent):
                 confirmed_slots,
             )
             merged_query = rewritten or result.merged_query
-            logger.info(f"Clarified query (LLM rewritten): {merged_query[:100]}...")
+            logger.debug(f"Clarified query (LLM rewritten): {merged_query}...")
 
             self.memory.session.clarification_state = {
                 "status": "completed",
