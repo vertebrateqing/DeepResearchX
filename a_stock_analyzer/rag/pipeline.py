@@ -138,14 +138,15 @@ class RAGPipeline:
         self,
         file_path: str,
         extra_metadata: Optional[dict[str, Any]] = None,
-        use_vlm: bool = True,
+        use_vlm: Optional[bool] = None,
     ) -> list[str]:
         """Ingest a PDF file with multimodal support (text, tables, charts).
 
         Args:
             file_path: Path to PDF file
             extra_metadata: Additional metadata
-            use_vlm: Whether to use VLM for chart understanding
+            use_vlm: Override config to enable/disable VLM for chart understanding.
+                Defaults to the value from config (vlm.enabled), which is false.
 
         Returns:
             List of chunk IDs
@@ -157,8 +158,9 @@ class RAGPipeline:
         # Extract all content types
         doc = extractor.load(file_path)
 
-        # Process images with VLM if enabled
-        if use_vlm and doc.get_image_chunks():
+        # Process images with VLM if enabled (default from config, false)
+        vlm_enabled = use_vlm if use_vlm is not None else get_settings().vlm.enabled
+        if vlm_enabled and doc.get_image_chunks():
             doc = await extractor.process_with_vlm(doc)
 
         # Convert chunks to embedding texts

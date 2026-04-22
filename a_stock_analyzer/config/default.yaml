@@ -37,9 +37,9 @@ llm:
 
 # Embedding配置
 embedding:
-  provider: openai
+  provider: local
 
-  # Embedding模型名称
+  # Embedding模型名称 (仅 provider=openai 时生效)
   # OpenAI: text-embedding-3-large, text-embedding-3-small, text-embedding-ada-002
   # 智谱AI: embedding-3
   # 百度千帆: embedding-v1
@@ -48,7 +48,7 @@ embedding:
 
   api_key: ${OPENAI_API_KEY}
 
-  # Embedding API base_url (可与 LLM 不同)
+  # Embedding API base_url (provider=openai 时生效)
   # OpenAI: https://api.openai.com/v1/embeddings
   # 智谱AI: https://open.bigmodel.cn/api/paas/v4/embeddings
   # 百度千帆: https://qianfan.baidubce.com/v2/embeddings
@@ -59,9 +59,13 @@ embedding:
   timeout: 30
 
   # 本地模型配置 (当 provider=local 时使用)
-  local_model_path: null  # 如: BAAI/bge-large-zh-v1.5
+  local_model_path: BAAI/bge-large-zh-v1.5
   batch_size: 32
   device: auto  # auto / cpu / cuda
+
+# VLM (视觉语言模型) 配置
+vlm:
+  enabled: false  # 默认关闭VLM图表理解，如需开启请改为 true
 
 # RAG配置
 rag:

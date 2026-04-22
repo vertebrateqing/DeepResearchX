@@ -89,6 +89,11 @@ class AgentConfig(BaseSettings):
     system_prompt: str = ""
 
 
+class VLMConfig(BaseSettings):
+    enabled: bool = False
+    model_config = SettingsConfigDict(env_prefix="VLM_")
+
+
 class AgentsConfig(BaseSettings):
     orchestrator: AgentConfig = Field(default_factory=AgentConfig)
     market_analysis: AgentConfig = Field(default_factory=AgentConfig)
@@ -123,6 +128,7 @@ class Settings(BaseSettings):
     rag: RAGConfig = Field(default_factory=RAGConfig)
     data_sources: DataSourcesConfig = Field(default_factory=DataSourcesConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
+    vlm: VLMConfig = Field(default_factory=VLMConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
 
