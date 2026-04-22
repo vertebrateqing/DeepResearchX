@@ -59,29 +59,29 @@ class AKShareTool(BaseTool):
         limit: int = 20,
     ) -> dict[str, Any]:
         """Execute AKShare data fetch."""
-        logger.info(f"[AKShareTool] data_type={data_type}, symbol={symbol}, industry={industry}, limit={limit}")
+        logger.info(f"[AKShareTool] data_type={data_type}")
         try:
             if data_type == "stock_spot":
-                return await self._get_stock_spot(symbol, limit)
+                result = await self._get_stock_spot(symbol, limit)
             elif data_type == "industry_board":
-                return await self._get_industry_board(limit)
+                result = await self._get_industry_board(limit)
             elif data_type == "stock_financial":
-                return await self._get_stock_financial(symbol)
+                result = await self._get_stock_financial(symbol)
             elif data_type == "stock_news":
-                return await self._get_stock_news(symbol, limit)
+                result = await self._get_stock_news(symbol, limit)
             elif data_type == "market_sentiment":
-                return await self._get_market_sentiment()
+                result = await self._get_market_sentiment()
             elif data_type == "stock_list":
-                return await self._get_stock_list()
+                result = await self._get_stock_list()
             elif data_type == "industry_stocks":
-                return await self._get_industry_stocks(industry, limit)
+                result = await self._get_industry_stocks(industry, limit)
             else:
-                return {"error": f"Unknown data_type: {data_type}"}
-            result = {"error": f"Unknown data_type: {data_type}"}
-            logger.debug(f"[AKShareTool] result: {json.dumps(result, ensure_ascii=False)}")
+                result = {"error": f"Unknown data_type: {data_type}"}
+            count = result.get("count") or len(result.get("data", [])) or len(result.get("indices", []))
+            logger.debug(f"[AKShareTool] {data_type} returned {count} records")
             return result
         except Exception as e:
-            logger.error(f"AKShare fetch failed: {e}")
+            logger.error(f"[AKShareTool] {data_type} failed: {e}")
             return {"error": str(e), "data_type": data_type}
 
     async def _get_stock_spot(self, symbol: str, limit: int) -> dict[str, Any]:
