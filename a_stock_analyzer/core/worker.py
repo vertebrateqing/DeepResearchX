@@ -14,6 +14,7 @@ from typing import Any, Optional
 from a_stock_analyzer.config.settings import get_settings
 from a_stock_analyzer.core.agent import LLMClient, ReActAgent
 from a_stock_analyzer.core.base import AgentContext, BaseSkill, BaseTool
+from a_stock_analyzer.core.context_manager import ContextManager, TokenBudget
 from a_stock_analyzer.core.finding import Finding, Source
 from a_stock_analyzer.core.message import AgentMessage
 from a_stock_analyzer.core.research_plan import TaskNode
@@ -91,8 +92,6 @@ ROLE_PROMPTS: dict[str, str] = {
 - 最终输出必须是 JSON 格式：{"summary": "...", "details": {...}, "sources": [...]}""",
 }
 
-DEFAULT_TOOLS: list[BaseTool] = [AKShareTool(), WebSearchTool()]
-
 
 class GenericWorker(ReActAgent):
     """A general-purpose research worker whose role is injected at runtime."""
@@ -104,6 +103,7 @@ class GenericWorker(ReActAgent):
         skills: Optional[list[BaseSkill]] = None,
         model: Optional[str] = None,
         max_iterations: int = 10,
+        context_manager: Optional[ContextManager] = None,
     ):
         role_prompt = ROLE_PROMPTS.get(task.role, ROLE_PROMPTS["web_search"])
 
@@ -138,12 +138,13 @@ class GenericWorker(ReActAgent):
         super().__init__(
             name=f"worker_{task.task_id}",
             system_prompt=system_prompt,
-            tools=tools or DEFAULT_TOOLS,
+            tools=tools or [AKShareTool(), WebSearchTool()],
             skills=skills,
             model=model or get_settings().llm.model,
             max_iterations=max_iterations,
         )
         self.task = task
+        self.context_manager = context_manager
 
     async def execute(self, dependency_inputs: dict[str, Any]) -> Finding:
         """Execute the task and return a structured Finding.
@@ -156,21 +157,41 @@ class GenericWorker(ReActAgent):
             A Finding with summary, details, sources and confidence.
         """
         # Build user prompt from goal + dependency context
-        prompt_parts = [f"任务目标: {self.task.goal}"]
-
-        if dependency_inputs:
-            prompt_parts.append("\n【前置任务结果】")
+        if self.context_manager:
+            dep_findings = []
             for dep_id, finding in dependency_inputs.items():
-                prompt_parts.append(f"\n来自 {dep_id}:")
-                prompt_parts.append(finding.to_planner_context())
-                if finding.details:
-                    details_json = json.dumps(finding.details, ensure_ascii=False, indent=2)
-                    prompt_parts.append(f"详细数据: {details_json[:2000]}")
+                dep_findings.append({
+                    "task_id": dep_id,
+                    "role": finding.role,
+                    "summary": finding.summary,
+                    "details": finding.details,
+                    "sources": [s.to_dict() for s in finding.sources],
+                    "confidence": finding.confidence,
+                })
+            budget = TokenBudget(self.context_manager.worker_budget.max_tokens)
+            user_input = self.context_manager.build_worker_context(
+                task_goal=self.task.goal,
+                task_inputs=self.task.inputs,
+                dependency_findings=dep_findings,
+                budget=budget,
+            )
+            user_input += "\n\n请完成上述任务，并在最终回答中输出符合要求的 JSON 格式结果。"
+        else:
+            prompt_parts = [f"任务目标: {self.task.goal}"]
 
-        prompt_parts.append(
-            "\n请完成上述任务，并在最终回答中输出符合要求的 JSON 格式结果。"
-        )
-        user_input = "\n".join(prompt_parts)
+            if dependency_inputs:
+                prompt_parts.append("\n【前置任务结果】")
+                for dep_id, finding in dependency_inputs.items():
+                    prompt_parts.append(f"\n来自 {dep_id}:")
+                    prompt_parts.append(finding.to_planner_context())
+                    if finding.details:
+                        details_json = json.dumps(finding.details, ensure_ascii=False, indent=2)
+                        prompt_parts.append(f"详细数据: {details_json[:2000]}")
+
+            prompt_parts.append(
+                "\n请完成上述任务，并在最终回答中输出符合要求的 JSON 格式结果。"
+            )
+            user_input = "\n".join(prompt_parts)
 
         logger.info(f"[Worker {self.task.task_id}] Executing role={self.task.role}, goal={self.task.goal[:60]}...")
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from a_stock_analyzer.config.settings import get_settings
-from a_stock_analyzer.memory.models import Finding, UserPreferences
+from a_stock_analyzer.memory.models import MemoryFinding, UserPreferences
 from a_stock_analyzer.rag.embedding import EmbeddingService
 from a_stock_analyzer.rag.vector_store import ChromaVectorStore
 
@@ -64,7 +64,7 @@ class LongTermStore:
 
     # --- Semantic Memory (Findings) ---
 
-    async def add_finding(self, finding: Finding) -> str:
+    async def add_finding(self, finding: MemoryFinding) -> str:
         """Add a finding to long-term semantic memory.
 
         Args:

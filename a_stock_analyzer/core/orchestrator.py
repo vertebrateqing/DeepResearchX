@@ -255,7 +255,7 @@ class OrchestratorAgent(BaseAgent):
                         dep_inputs[dep_id] = t.output
                         break
 
-            worker = GenericWorker(task)
+            worker = GenericWorker(task, context_manager=self.context_manager)
             return await worker.execute(dep_inputs)
         return execute
 

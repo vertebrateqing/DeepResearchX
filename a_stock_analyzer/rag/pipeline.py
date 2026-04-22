@@ -311,6 +311,12 @@ class RAGPipeline:
 
         context = "\n\n".join(context_parts)
 
+        # Truncate context to avoid exceeding LLM context limit
+        # Rough estimate: 1.5 chars/token, reserve ~4000 tokens for context
+        MAX_CONTEXT_CHARS = 6000
+        if len(context) > MAX_CONTEXT_CHARS:
+            context = context[:MAX_CONTEXT_CHARS - 3] + "..."
+
         prompt = f"""基于以下财报信息，请回答用户的问题。如果信息不足以回答，请明确说明。
 
 ---

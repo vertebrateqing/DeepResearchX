@@ -43,13 +43,15 @@
 ## 仍存在的问题 / 改进空间
 
 ### 未接入的设计（不阻塞运行）
-- [ ] ContextManager 的 `build_planner_context` 和 `build_worker_context` 目前未被使用，仅 synthesizer 层真正生效
-- [ ] 建议未来在 planner.evaluate() 和 worker.execute() 中接入 token budget 控制
+- [x] ContextManager 的 `build_worker_context` 已接入 GenericWorker.execute()，每个 worker 使用独立 TokenBudget
+- [ ] ContextManager 的 `build_planner_context` 暂未接入 planner.evaluate()（evaluate prompt 较短，当前手动构建已足够）
+- [x] worker.execute() 中已接入 token budget 控制
 
 ### 潜在优化
-- [ ] AKShareTool 内部同步 pandas 调用会阻塞事件循环（当前 max_parallel=3，影响有限）
-- [ ] DuckDuckGo 搜索未包装在 `asyncio.to_thread()` 中
-- [ ] `core/finding.py` 和 `memory/models.py` 存在两个不同的 `Finding` 类，命名易混淆
+- [x] AKShareTool 内部同步 pandas 调用已包装在 `asyncio.to_thread()` 中
+- [x] DuckDuckGo 搜索已包装在 `asyncio.to_thread()` 中
+- [x] `core/finding.py` 和 `memory/models.py` 的 `Finding` 命名冲突已解决（memory 侧重命名为 `MemoryFinding`）
+- [x] RAGPipeline.generate_answer() 已添加上下文长度截断（MAX_CONTEXT_CHARS=6000）
 
 ### 架构演进方向
 - [ ] 可将 `FinancialRAGAgent` 的能力（RAGPipeline + QueryRewriter）作为 tool 提供给 GenericWorker

@@ -7,7 +7,7 @@ from typing import Any
 from a_stock_analyzer.memory.long_term_store import LongTermStore
 from a_stock_analyzer.memory.models import (
     ConversationTurn,
-    Finding,
+    MemoryFinding,
     SessionMemory,
     TaskResult,
     TaskState,
@@ -224,7 +224,7 @@ class MemoryManager:
         confidence: float = 0.5,
         related_entities: list[str] | None = None,
         expires_hours: int | None = None,
-    ) -> Finding:
+    ) -> MemoryFinding:
         """Add a finding to session memory."""
         import uuid
 
@@ -232,7 +232,7 @@ class MemoryManager:
         if expires_hours:
             expires = datetime.now() + timedelta(hours=expires_hours)
 
-        finding = Finding(
+        finding = MemoryFinding(
             finding_id=f"finding_{uuid.uuid4().hex[:8]}",
             source=source,
             source_ref=source_ref,

@@ -3,7 +3,7 @@
 from a_stock_analyzer.memory.manager import MemoryManager
 from a_stock_analyzer.memory.models import (
     ConversationTurn,
-    Finding,
+    MemoryFinding,
     SessionMemory,
     TaskResult,
     TaskState,
@@ -15,7 +15,7 @@ __all__ = [
     "SessionMemory",
     "TaskState",
     "TaskResult",
-    "Finding",
+    "MemoryFinding",
     "UserPreferences",
     "ConversationTurn",
     "SessionStore",

@@ -85,19 +85,21 @@ class ContextManager:
         user_query: str,
         plan_status: str,
         findings: list[dict[str, Any]],
+        budget: TokenBudget | None = None,
     ) -> str:
         """Build compact context for Planner evaluation."""
+        budget = budget or self.planner_budget
         parts = [f"用户请求: {user_query}", f"计划状态: {plan_status}"]
 
         if findings:
             parts.append("\n【已完成的任务摘要】")
             for f in findings:
                 line = f"- [{f.get('role', '?')}] {f.get('summary', '')}"
-                if not self.planner_budget.can_fit(line):
+                if not budget.can_fit(line):
                     parts.append("\n... (更多结果被截断)")
                     break
                 parts.append(line)
-                self.planner_budget.consume(self.planner_budget.count(line))
+                budget.consume(budget.count(line))
 
         return "\n".join(parts)
 
@@ -106,8 +108,10 @@ class ContextManager:
         task_goal: str,
         task_inputs: dict[str, Any],
         dependency_findings: list[dict[str, Any]],
+        budget: TokenBudget | None = None,
     ) -> str:
         """Build context for a Worker execution."""
+        budget = budget or self.worker_budget
         parts = [f"任务目标: {task_goal}"]
 
         if task_inputs:
@@ -117,12 +121,29 @@ class ContextManager:
             parts.append("\n【前置任务结果】")
             for df in dependency_findings:
                 summary = df.get("summary", "")
-                line = f"- [{df.get('role', '?')}] {summary}"
-                if not self.worker_budget.can_fit(line):
+                task_id = df.get("task_id", "")
+                prefix = f"[{task_id}] " if task_id else ""
+                line = f"- {prefix}[{df.get('role', '?')}] {summary}"
+                if not budget.can_fit(line):
                     parts.append("\n... (更多前置结果被截断)")
                     break
                 parts.append(line)
-                self.worker_budget.consume(self.worker_budget.count(line))
+                budget.consume(budget.count(line))
+
+                # Include details if budget allows
+                details = df.get("details", {})
+                if details:
+                    details_text = json.dumps(details, ensure_ascii=False, indent=2)
+                    detail_line = f"  详细数据: {details_text}"
+                    if budget.can_fit(detail_line):
+                        parts.append(detail_line)
+                        budget.consume(budget.count(detail_line))
+                    else:
+                        max_chars = int(budget.remaining * CHARS_PER_TOKEN)
+                        if max_chars > 50:
+                            truncated = details_text[:max_chars - 3] + "..."
+                            parts.append(f"  详细数据: {truncated}")
+                            budget.consume(budget.count(truncated))
 
         return "\n".join(parts)
 
@@ -130,8 +151,10 @@ class ContextManager:
         self,
         user_query: str,
         findings: list[dict[str, Any]],
+        budget: TokenBudget | None = None,
     ) -> str:
         """Build context for final report synthesis."""
+        budget = budget or self.synthesizer_budget
         parts = [f"用户请求: {user_query}"]
 
         if not findings:
@@ -142,11 +165,11 @@ class ContextManager:
 
         for i, f in enumerate(sorted_findings, 1):
             block = self._format_finding_block(i, f)
-            if not self.synthesizer_budget.can_fit(block):
+            if not budget.can_fit(block):
                 parts.append("\n... (更多发现被截断)")
                 break
             parts.append(block)
-            self.synthesizer_budget.consume(self.synthesizer_budget.count(block))
+            budget.consume(budget.count(block))
 
         return "\n".join(parts)
 

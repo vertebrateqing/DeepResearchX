@@ -76,8 +76,8 @@ class TaskResult:
 
 
 @dataclass
-class Finding:
-    """A piece of knowledge discovered during research."""
+class MemoryFinding:
+    """A piece of knowledge discovered during research, stored in session memory."""
 
     finding_id: str
     source: str  # "web_search", "akshare", "financial_report", "agent_analysis"
@@ -147,7 +147,7 @@ class SessionMemory:
     completed_tasks: list[TaskResult] = field(default_factory=list)
 
     # Knowledge
-    accumulated_findings: list[Finding] = field(default_factory=list)
+    accumulated_findings: list[MemoryFinding] = field(default_factory=list)
 
     # Preferences
     user_preferences: UserPreferences = field(default_factory=UserPreferences)
@@ -236,7 +236,7 @@ class SessionMemory:
         ]
 
         session.accumulated_findings = [
-            Finding(
+            MemoryFinding(
                 finding_id=f["finding_id"],
                 source=f["source"],
                 source_ref=f.get("source_ref", ""),
