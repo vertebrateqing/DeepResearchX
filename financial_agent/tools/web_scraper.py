@@ -454,9 +454,17 @@ class WebScraperTool(BaseTool):
 
         logger.info(f"[WebScraper] Generated {len(all_chunks)} chunks from {len(pages)} pages")
 
-        # Filter by vector similarity
+        # Filter by vector similarity (skip if too many chunks to avoid CPU bottleneck)
+        max_chunks_for_embedding = getattr(self.settings, "max_chunks_for_embedding", 200)
         if all_chunks and query:
-            filtered_chunks = await self._filter_by_similarity(all_chunks, query, top_k)
+            if len(all_chunks) > max_chunks_for_embedding:
+                logger.warning(
+                    f"[WebScraper] Too many chunks ({len(all_chunks)} > {max_chunks_for_embedding}), "
+                    f"skipping similarity filtering and returning first {top_k} chunks"
+                )
+                filtered_chunks = all_chunks[:top_k]
+            else:
+                filtered_chunks = await self._filter_by_similarity(all_chunks, query, top_k)
         else:
             filtered_chunks = all_chunks[:top_k]
 
@@ -520,12 +528,24 @@ class WebScraperTool(BaseTool):
     async def _scrape_urls(self, urls: list[str]) -> list[ScrapedPage]:
         """Scrape multiple URLs concurrently."""
         t0 = time.perf_counter()
+        max_pages = getattr(self.settings, "max_pages", 10)
+        if len(urls) > max_pages:
+            logger.info(f"[WebScraper] Limiting URLs from {len(urls)} to max_pages={max_pages}")
+            urls = urls[:max_pages]
+
         semaphore = asyncio.Semaphore(getattr(self.settings, "concurrency", 5))
+        per_url_timeout = getattr(self.settings, "timeout", 30)
 
         async def _fetch_one(url: str) -> ScrapedPage | None:
             async with semaphore:
                 try:
-                    return await self._fetch_page(url)
+                    return await asyncio.wait_for(
+                        self._fetch_page(url),
+                        timeout=per_url_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(f"[WebScraper] Timeout fetching {url} after {per_url_timeout}s")
+                    return None
                 except Exception as e:
                     logger.warning(f"[WebScraper] Failed to fetch {url}: {e}")
                     return None
@@ -568,6 +588,13 @@ class WebScraperTool(BaseTool):
         latency = time.perf_counter() - t0
         logger.info(f"[WebScraper] HTML {url}: fetch+extract={latency:.2f}s, text_len={len(text)}")
 
+        # Truncate overly long content
+        max_len = getattr(self.settings, "max_text_length", 50000)
+        if len(text) > max_len:
+            text = text[:max_len]
+            metadata["truncated"] = True
+            metadata["original_length"] = len(text)
+
         return ScrapedPage(
             url=url,
             title=title,
@@ -580,6 +607,25 @@ class WebScraperTool(BaseTool):
         """Fetch PDF and extract text."""
         logger.debug(f"[WebScraper] Fetching PDF: {url}")
         t0 = time.perf_counter()
+
+        # Check content length before downloading large files
+        max_file_size = 10 * 1024 * 1024  # 10 MB
+        try:
+            head_response = await self.client.head(url, follow_redirects=True)
+            content_length = head_response.headers.get("content-length")
+            if content_length and int(content_length) > max_file_size:
+                logger.warning(f"[WebScraper] Skipping large PDF {url}: {int(content_length) / 1024 / 1024:.1f}MB > 10MB")
+                return ScrapedPage(
+                    url=url,
+                    title=f"PDF: {url.split('/')[-1]}",
+                    content="",
+                    content_type="pdf",
+                    metadata={"skipped": True, "reason": "file_too_large", "content_length": int(content_length)},
+                )
+        except Exception:
+            # HEAD may not be supported, proceed with GET
+            pass
+
         response = await self.client.get(url)
         response.raise_for_status()
 
@@ -600,6 +646,13 @@ class WebScraperTool(BaseTool):
             "file_size": len(response.content),
         }
 
+        # Truncate overly long content
+        max_len = getattr(self.settings, "max_text_length", 50000)
+        if len(text) > max_len:
+            text = text[:max_len]
+            metadata["truncated"] = True
+            metadata["original_length"] = len(text)
+
         latency = time.perf_counter() - t0
         logger.info(f"[WebScraper] PDF {url}: fetch+extract={latency:.2f}s, text_len={len(text)}")
 
@@ -609,7 +662,6 @@ class WebScraperTool(BaseTool):
             content=text,
             content_type="pdf",
             metadata={**metadata, "latency_s": latency},
-            metadata=metadata,
         )
 
     # --- Similarity filtering ---

@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+import traceback
 from typing import Any, Optional
 
 import httpx
@@ -278,10 +279,15 @@ class ReActAgent(BaseAgent):
                     try:
                         result = await self.call_tool(tool_name, tool_args)
                         logger.info(f"Agent {self.name} tool {tool_name} executed")
-                        logger.debug(f"Agent {self.name} tool {tool_name} result: {result[:100]}")
+                        try:
+                            result_preview = str(result)[:200]
+                        except Exception:
+                            result_preview = "<unable to preview>"
+                        logger.debug(f"Agent {self.name} tool {tool_name} result: {result_preview}")
                         run_ctx.add_tool_call(tool_name, tool_args, result)
                     except Exception as e:
                         logger.error(f"Tool {tool_name} failed: {e}")
+                        logger.error(f"Tool {tool_name} traceback: {traceback.format_exc()}")
                         result = {"error": str(e)}
 
                     # Add tool result to messages

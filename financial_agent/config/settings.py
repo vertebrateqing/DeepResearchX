@@ -83,9 +83,11 @@ class WebScraperConfig(BaseSettings):
     enabled: bool = True
     timeout: int = 30
     concurrency: int = 5
-    max_pages: int = 10
-    chunk_size: int = 512
-    chunk_overlap: int = 64
+    max_pages: int = 5
+    chunk_size: int = 2048
+    chunk_overlap: int = 128
+    max_text_length: int = 30000  # Max chars per page, truncate if exceeded
+    max_chunks_for_embedding: int = 50  # Skip similarity filtering if chunks exceed this
 
 
 class DataSourcesConfig(BaseSettings):

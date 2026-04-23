@@ -1,5 +1,6 @@
 """Embedding generation tool."""
 
+import asyncio
 import logging
 import os
 import time
@@ -16,6 +17,10 @@ logger = logging.getLogger(__name__)
 # Use HF-Mirror for China users if not explicitly configured
 if not os.environ.get("HF_ENDPOINT"):
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
+# Module-level singleton for local embedding model to avoid repeated loading
+_local_model_singleton: Any = None
+_local_model_lock = asyncio.Lock()
 
 
 class EmbeddingTool(BaseTool):
@@ -38,7 +43,6 @@ class EmbeddingTool(BaseTool):
 
     def __init__(self) -> None:
         self.settings = get_settings().embedding
-        self._local_model: Optional[Any] = None
         self._client: Optional[httpx.AsyncClient] = None
 
     @property
@@ -111,29 +115,34 @@ class EmbeddingTool(BaseTool):
 
     async def _embed_local(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings using local model."""
-        if self._local_model is None:
-            from sentence_transformers import SentenceTransformer
+        global _local_model_singleton
 
-            model_path = self.settings.local_model_path or "BAAI/bge-large-zh-v1.5"
-            device = self.settings.device
-            if device == "auto":
-                try:
-                    import torch
-                    device = "cuda" if torch.cuda.is_available() else "cpu"
-                except Exception:
-                    device = "cpu"
+        if _local_model_singleton is None:
+            async with _local_model_lock:
+                # Double-check after acquiring lock
+                if _local_model_singleton is None:
+                    from sentence_transformers import SentenceTransformer
 
-            logger.info(f"[Embedding] Loading local model: {model_path} on {device}")
-            t0 = time.perf_counter()
-            try:
-                self._local_model = SentenceTransformer(model_path, device=device)
-            except Exception as e:
-                logger.warning(f"[Embedding] Failed to load model on {device}: {e}, falling back to CPU")
-                self._local_model = SentenceTransformer(model_path, device="cpu")
-            logger.info(f"[Embedding] Model loaded in {time.perf_counter() - t0:.2f}s")
+                    model_path = self.settings.local_model_path or "BAAI/bge-large-zh-v1.5"
+                    device = self.settings.device
+                    if device == "auto":
+                        try:
+                            import torch
+                            device = "cuda" if torch.cuda.is_available() else "cpu"
+                        except Exception:
+                            device = "cpu"
+
+                    logger.info(f"[Embedding] Loading local model: {model_path} on {device}")
+                    t0 = time.perf_counter()
+                    try:
+                        _local_model_singleton = SentenceTransformer(model_path, device=device)
+                    except Exception as e:
+                        logger.warning(f"[Embedding] Failed to load model on {device}: {e}, falling back to CPU")
+                        _local_model_singleton = SentenceTransformer(model_path, device="cpu")
+                    logger.info(f"[Embedding] Model loaded in {time.perf_counter() - t0:.2f}s")
 
         t0 = time.perf_counter()
-        embeddings = self._local_model.encode(
+        embeddings = _local_model_singleton.encode(
             texts,
             batch_size=self.settings.batch_size,
             show_progress_bar=False,

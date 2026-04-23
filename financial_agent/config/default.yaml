@@ -100,9 +100,11 @@ data_sources:
     enabled: true
     timeout: 30
     concurrency: 5
-    max_pages: 10
-    chunk_size: 512
-    chunk_overlap: 64
+    max_pages: 5      # 减少最大页面数以控制总体量
+    chunk_size: 2048  # 增大块大小以减少块数量
+    chunk_overlap: 128
+    max_text_length: 30000  # 单页最大字符数，超限截断
+    max_chunks_for_embedding: 50  # 超此数量跳过CPU密集的向量相似度过滤
 
 # Agent配置
 # 注意: agents.*.model 可覆盖全局 llm.model
@@ -133,6 +135,6 @@ output:
 
 # 日志配置
 logging:
-  level: DEBUG  # 测试开发阶段打全日志，生产环境可改为 INFO
+  level: INFO  # 性能观测阶段用 INFO，减少 DEBUG 噪音
   format: console  # json / console，开发阶段用 console 更易读
   file: null  # 日志文件路径，null则只输出到控制台
