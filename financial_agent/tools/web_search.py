@@ -78,9 +78,21 @@ class WebSearchTool(BaseTool):
         else:
             result = await self._search_duckduckgo(query, max_results)
 
-        # Scrape result URLs if enabled
+        # Build chunks from search results
         should_scrape = scrape and self.scraper_settings.enabled
         if should_scrape and result.get("results"):
+            # For Tavily, try to use raw_content directly to avoid extra HTTP requests
+            if self.settings.provider == "tavily":
+                chunks = self._extract_chunks_from_tavily(result["results"], query)
+                if chunks:
+                    result["scraped_chunks"] = chunks
+                    result["scraped_total_chunks"] = len(chunks)
+                    logger.info(
+                        f"[WebSearch] Extracted {len(chunks)} chunks from Tavily raw_content"
+                    )
+                    return result
+
+            # Fall back to manual scraping for DuckDuckGo or when Tavily raw_content is empty
             urls = [r["url"] for r in result["results"] if r.get("url")]
             if urls:
                 try:
@@ -106,6 +118,46 @@ class WebSearchTool(BaseTool):
 
         return result
 
+    def _extract_chunks_from_tavily(
+        self, results: list[dict[str, Any]], query: str
+    ) -> list[dict[str, Any]]:
+        """Extract text chunks from Tavily's raw_content to avoid extra HTTP fetches."""
+        from financial_agent.tools.web_scraper import split_text
+
+        chunks: list[dict[str, Any]] = []
+        chunk_size = getattr(self.scraper_settings, "chunk_size", 2048)
+        chunk_overlap = getattr(self.scraper_settings, "chunk_overlap", 128)
+        max_text_length = getattr(self.scraper_settings, "max_text_length", 30000)
+        top_k = getattr(self.scraper_settings, "max_pages", 5)
+
+        for result in results:
+            raw = result.get("raw_content", "")
+            if not raw:
+                continue
+
+            # Truncate if too long
+            if len(raw) > max_text_length:
+                raw = raw[:max_text_length]
+
+            text_chunks = split_text(
+                raw,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+            for i, text in enumerate(text_chunks):
+                chunks.append({
+                    "text": text,
+                    "source_url": result.get("url", ""),
+                    "source_title": result.get("title", ""),
+                    "chunk_index": i,
+                })
+
+        # Limit to top_k chunks per result
+        if len(chunks) > top_k:
+            chunks = chunks[:top_k]
+
+        return chunks
+
     async def _search_tavily(
         self,
         query: str,
@@ -123,6 +175,7 @@ class WebSearchTool(BaseTool):
                 max_results=min(max_results, self.settings.max_results),
                 search_depth=search_depth,
                 include_answer=True,
+                include_raw_content=True,
             )
             latency = time.perf_counter() - t0
 
