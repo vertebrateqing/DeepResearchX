@@ -1,14 +1,17 @@
 """Orchestrator agent — Planner-Worker-Synthesizer (PWS) architecture.
 
-V3 features:
-- Dynamic research planning via LLM (no hard-coded pipeline)
-- Generic workers with role-based prompts
-- DAG-based parallel task execution
-- Layered context management with token budgets
+V4 features:
+- OutlinePlanner: LLM-generated report outline with chapter breakdown
+- ChapterWorker: autonomous per-chapter research & writing
+- ReviserAgent: quality review loop per chapter
+- IntegrationAgent: merge chapters into coherent draft
+- EditorAgent: final polish for grammar, facts, completeness
+- Report export to MD/PDF
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
@@ -16,34 +19,39 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+import asyncio
+
 from financial_agent.config.settings import get_settings
 from financial_agent.core.agent import LLMClient, SimpleAgent
 from financial_agent.core.base import AgentContext, BaseAgent, BaseSkill, BaseTool
-from financial_agent.core.context_manager import ContextManager
+from financial_agent.core.chapter_worker import ChapterWorker
+from financial_agent.core.editor import EditorAgent
+from financial_agent.core.finding import Finding
 from financial_agent.core.intent_clarifier import (
     ClarificationResult,
     IntentClarifier,
 )
+from financial_agent.core.integration import IntegrationAgent
 from financial_agent.core.message import AgentMessage
-from financial_agent.core.planner import PlanUpdate, ResearchPlanner
+from financial_agent.core.outline_planner import OutlinePlanner, ReportOutline
 from financial_agent.core.report_generator import ReportGenerator
-from financial_agent.core.research_plan import DAGScheduler, ResearchPlan, TaskNode
-from financial_agent.core.worker import GenericWorker
+from financial_agent.core.reviser import ReviserAgent
 from financial_agent.memory.manager import MemoryManager
 
 logger = logging.getLogger(__name__)
 
 
 class OrchestratorAgent(BaseAgent):
-    """Main orchestrator using Planner-Worker-Synthesizer pattern.
+    """Main orchestrator using V4 multi-phase report generation.
 
     Pipeline:
     1. Intent clarification (HITL)
-    2. Planner generates research plan (DAG)
-    3. DAGScheduler dispatches GenericWorkers in parallel
-    4. Planner evaluates findings, optionally adds tasks
-    5. Synthesizer generates final report
-    6. Report exported to MD/PDF
+    2. OutlinePlanner generates report outline
+    3. All chapters execute in parallel with pre-search context
+    4. ReviserAgent reviews each chapter (revision loop)
+    5. IntegrationAgent merges chapters into draft
+    6. EditorAgent polishes the draft
+    7. Report exported to MD/PDF
     """
 
     def __init__(
@@ -70,11 +78,12 @@ class OrchestratorAgent(BaseAgent):
             model=self.model,
         )
 
-        # V3 components
+        # V4 components
         self.intent_clarifier = IntentClarifier()
-        self.planner = ResearchPlanner()
-        self.scheduler = DAGScheduler(max_parallel=3, max_retries=2)
-        self.context_manager = ContextManager()
+        self.outline_planner = OutlinePlanner()
+        self.reviser = ReviserAgent()
+        self.integration = IntegrationAgent()
+        self.editor = EditorAgent()
         self.memory = MemoryManager(
             session_id=session_id or self._generate_session_id(),
             user_id=user_id,
@@ -87,6 +96,11 @@ class OrchestratorAgent(BaseAgent):
 
     def _generate_session_id(self) -> str:
         return f"sess_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+
+    @property
+    def session_dir(self) -> Path:
+        """Directory for this session's working files."""
+        return Path("./financial_agent/data/sessions") / self.memory.session_id
 
     async def run(
         self,
@@ -156,16 +170,15 @@ class OrchestratorAgent(BaseAgent):
         original_query: str,
         context: Optional[AgentContext] = None,
     ) -> AgentMessage:
-        """Execute research via Planner-Worker-Synthesizer."""
-        # Inject current date
+        """Execute V4 research pipeline."""
         from datetime import datetime
         now = datetime.now()
         date_context = f"【当前真实日期：{now.strftime('%Y年%m月%d日')}】"
         enriched_query = f"{date_context}\n\n{merged_query}"
 
-        logger.info(f"[Orchestrator] Starting deepresearch for: {enriched_query[:100]}...")
-        logger.debug(f"[Orchestrator] Full enriched query: {enriched_query}")
-        self.context_manager.reset()
+        logger.info(f"[Orchestrator] Starting V4 pipeline for: {enriched_query[:100]}...")
+        session_dir = self.session_dir
+        session_dir.mkdir(parents=True, exist_ok=True)
 
         # Record main task
         main_task = self.memory.start_task(
@@ -174,75 +187,100 @@ class OrchestratorAgent(BaseAgent):
             inputs={"query": original_query, "enriched_query": enriched_query},
         )
 
-        # --- Phase 1: Generate plan ---
-        logger.info("[Orchestrator] Phase 1: Generating research plan")
+        # --- Phase 1: Generate outline ---
+        logger.info("[Orchestrator] Phase 1: Generating report outline")
         t0 = time.perf_counter()
-        plan = await self.planner.generate_plan(enriched_query)
-        t1 = time.perf_counter()
-        logger.info(f"[Orchestrator] Phase 1 DONE: plan_gen={t1-t0:.2f}s, tasks={len(plan.tasks)}, strategy={plan.strategy}")
-        for t in plan.tasks:
-            logger.debug(f"[Orchestrator] Plan task: {t.task_id} role={t.role} deps={t.depends_on} goal={t.goal}")
-
-        # --- Phase 2: Execute plan ---
-        logger.info("[Orchestrator] Phase 2: Executing research plan")
-        t0 = time.perf_counter()
-        self._current_plan = plan.tasks
-        findings = await self.scheduler.execute(
-            plan,
-            worker_factory=self._create_worker,
+        outline = await self.outline_planner.generate_outline(
+            user_query=enriched_query,
+            save_dir=session_dir,
         )
         t1 = time.perf_counter()
-        logger.info(f"[Orchestrator] Phase 2 DONE: scheduler_exec={t1-t0:.2f}s, findings={len(findings)}")
-
-        # --- Phase 3: Evaluate and optionally extend ---
-        logger.info(f"[Orchestrator] Phase 3: Evaluating {len(findings)} findings")
-        t0 = time.perf_counter()
-        plan_update = await self.planner.evaluate(plan, findings)
-        t1 = time.perf_counter()
-        eval_time = t1 - t0
-
-        if not plan_update.is_complete and plan_update.new_tasks:
-            logger.info(f"[Orchestrator] Extending plan with {len(plan_update.new_tasks)} new tasks")
-            t0 = time.perf_counter()
-            plan.tasks.extend(plan_update.new_tasks)
-            additional_findings = await self.scheduler.execute(
-                plan,
-                worker_factory=self._create_worker,
+        logger.info(
+            f"[Orchestrator] Phase 1 DONE: outline_gen={t1-t0:.2f}s, "
+            f"title='{outline.title}', chapters={len(outline.chapters)}"
+        )
+        for ch in outline.chapters:
+            logger.debug(
+                f"[Orchestrator] Outline chapter: {ch.chapter_id} "
+                f"tools={ch.suggested_tools}"
             )
-            findings.extend(additional_findings)
-            t1 = time.perf_counter()
-            logger.info(f"[Orchestrator] Phase 3 extended: eval={eval_time:.2f}s, extended_exec={t1-t0:.2f}s")
-        else:
-            logger.info(f"[Orchestrator] Phase 3 DONE: eval={eval_time:.2f}s, no extension needed")
 
-        # --- Phase 4: Synthesize report ---
-        logger.info("[Orchestrator] Phase 4: Synthesizing report")
-        logger.debug(f"[Orchestrator] Synthesizer input: {len(findings)} findings, query={original_query}")
+        # --- Phase 2: Execute chapters with review ---
+        logger.info("[Orchestrator] Phase 2: Executing chapters with review")
         t0 = time.perf_counter()
-        final_report = await self._synthesize_from_findings(original_query, findings)
-        logger.info(f"[Orchestrator] Phase 4 DONE: synthesis={time.perf_counter()-t0:.2f}s, report_len={len(final_report)}")
+        chapter_files, chapter_findings = await self._execute_chapters(
+            outline=outline,
+            session_dir=session_dir,
+        )
+        t1 = time.perf_counter()
+        passed_count = sum(
+            1 for f in chapter_findings if f.details.get("review_passed", True)
+        )
+        logger.info(
+            f"[Orchestrator] Phase 2 DONE: chapter_exec={t1-t0:.2f}s, "
+            f"chapters={len(chapter_files)}, passed={passed_count}"
+        )
+
+        # --- Phase 3: Integrate chapters ---
+        logger.info("[Orchestrator] Phase 3: Integrating chapters")
+        t0 = time.perf_counter()
+        draft_path = await self.integration.integrate(
+            title=outline.title,
+            summary_points=outline.executive_summary_points,
+            chapter_files=chapter_files,
+            session_dir=session_dir,
+        )
+        t1 = time.perf_counter()
+        logger.info(f"[Orchestrator] Phase 3 DONE: integration={t1-t0:.2f}s, draft={draft_path}")
+
+        # --- Phase 4: Editor review & polish ---
+        logger.info("[Orchestrator] Phase 4: Editorial review")
+        t0 = time.perf_counter()
+        final_draft = await self.editor.edit_loop(draft_path, session_dir)
+        t1 = time.perf_counter()
+        logger.info(f"[Orchestrator] Phase 4 DONE: editing={t1-t0:.2f}s, final={final_draft}")
 
         # --- Phase 5: Generate and save report ---
-        sections = self._build_sections(findings)
-        md_path, pdf_path = await self._generate_and_save_report(
-            user_input=original_query,
-            final_report=final_report,
+        logger.info("[Orchestrator] Phase 5: Generating final report")
+        t0 = time.perf_counter()
+        final_text = final_draft.read_text(encoding="utf-8")
+
+        # Build sections from chapter files for report metadata
+        sections = self._build_sections_from_chapters(chapter_files)
+
+        output_dir = Path(get_settings().output.output_dir)
+        generator = ReportGenerator()
+        markdown = generator.generate_markdown(
+            user_query=original_query,
+            final_report=final_text,
             sections=sections,
+            session_id=self.memory.session_id,
+            is_v4=True,
+        )
+        md_path, pdf_path = generator.save(
+            output_dir=output_dir,
+            session_id=self.memory.session_id,
+            markdown=markdown,
+        )
+        t1 = time.perf_counter()
+        logger.info(
+            f"[Orchestrator] Phase 5 DONE: export={t1-t0:.2f}s, "
+            f"md={md_path}, pdf={pdf_path}"
         )
 
         # Record completion
         self.memory.update_task(
             task_id=main_task.task_id,
             status="completed",
-            result={"summary": final_report[:500]},
+            result={"summary": final_text[:500]},
         )
         self.memory.add_finding(
             source="orchestrator",
-            content=final_report[:1000],
+            content=final_text[:1000],
             confidence=0.7,
             expires_hours=24,
         )
-        self.memory.add_assistant_message(final_report[:500])
+        self.memory.add_assistant_message(final_text[:500])
         await self.memory.save()
 
         metadata: dict[str, Any] = {}
@@ -250,34 +288,204 @@ class OrchestratorAgent(BaseAgent):
             metadata["report_md_path"] = str(md_path)
         if pdf_path:
             metadata["report_pdf_path"] = str(pdf_path)
+        metadata["session_dir"] = str(session_dir)
+        metadata["chapters"] = len(chapter_files)
 
         return AgentMessage.create_result(
             sender=self.name,
             receiver="user",
             result={
-                "report": final_report,
+                "report": final_text,
                 "sections": sections,
-                "findings_count": len(findings),
+                "chapters_count": len(chapter_files),
+                "outline_title": outline.title,
             },
             task_id=context.task_id if context else None,
             metadata=metadata,
         )
 
-    def _create_worker(self, task: TaskNode):
-        """Factory for DAGScheduler — returns a callable that executes the task."""
-        async def execute():
-            # Build dependency inputs
-            dep_inputs = {}
-            for dep_id in task.depends_on:
-                # Find completed task with this ID
-                for t in getattr(self, "_current_plan", []):
-                    if t.task_id == dep_id and t.output:
-                        dep_inputs[dep_id] = t.output
-                        break
+    async def _pre_search_chapters(
+        self,
+        chapters: list,
+        session_dir: Path,
+    ) -> dict[str, str]:
+        """Pre-search for all chapters using multi-query expansion.
 
-            worker = GenericWorker(task, context_manager=self.context_manager)
-            return await worker.execute(dep_inputs)
-        return execute
+        Returns mapping chapter_id -> formatted research context text.
+        """
+        from financial_agent.rag.query_rewriter import QueryRewriter
+        from financial_agent.tools.web_search import WebSearchTool
+
+        rewriter = QueryRewriter()
+        web_search = WebSearchTool()
+
+        # Collect queries per chapter
+        chapter_queries: dict[str, list[str]] = {}
+        all_tasks = []
+        task_meta = []  # (chapter_id, query_index)
+
+        for ch in chapters:
+            if ch.search_queries:
+                queries = ch.search_queries[:3]
+            else:
+                # Generate via rewriter (sync, but fast)
+                try:
+                    loop = asyncio.get_event_loop()
+                    queries = await rewriter.rewrite(ch.objective, n_variants=2)
+                    queries = queries[:3]
+                except Exception as e:
+                    logger.warning(f"[PreSearch] Rewriter failed for {ch.chapter_id}: {e}")
+                    queries = [ch.objective]
+
+            chapter_queries[ch.chapter_id] = queries
+            for q in queries:
+                all_tasks.append(web_search.execute(query=q, max_results=3))
+                task_meta.append(ch.chapter_id)
+
+        if not all_tasks:
+            return {}
+
+        logger.info(f"[PreSearch] Executing {len(all_tasks)} searches for {len(chapters)} chapters")
+        t0 = time.perf_counter()
+        results = await asyncio.gather(*all_tasks, return_exceptions=True)
+        t1 = time.perf_counter()
+        logger.info(f"[PreSearch] All searches done in {t1-t0:.2f}s")
+
+        # Merge results by chapter
+        chapter_results: dict[str, list[dict]] = {ch.chapter_id: [] for ch in chapters}
+        for ch_id, result in zip(task_meta, results):
+            if isinstance(result, Exception):
+                logger.warning(f"[PreSearch] Search failed for {ch_id}: {result}")
+                continue
+            if isinstance(result, dict) and result.get("results"):
+                chapter_results[ch_id].extend(result["results"])
+
+        # Format as text per chapter
+        formatted: dict[str, str] = {}
+        for ch in chapters:
+            items = chapter_results[ch.chapter_id]
+            # Deduplicate by URL
+            seen = set()
+            unique_items = []
+            for item in items:
+                url = item.get("url", "")
+                if url and url in seen:
+                    continue
+                if url:
+                    seen.add(url)
+                unique_items.append(item)
+
+            lines = [f"【章节 '{ch.title}' 预检索资料】"]
+            for i, item in enumerate(unique_items[:8], 1):  # max 8 per chapter
+                title = item.get("title", "无标题")
+                content = item.get("content", "")
+                url = item.get("url", "")
+                lines.append(f"\n{i}. {title}")
+                if content:
+                    lines.append(f"   摘要: {content[:400]}")
+                if url:
+                    lines.append(f"   来源: {url}")
+
+            if len(unique_items) == 0:
+                lines.append("\n（未检索到相关资料）")
+
+            formatted[ch.chapter_id] = "\n".join(lines)
+
+        # Save pre-search results
+        presearch_path = session_dir / "presearch.json"
+        try:
+            presearch_data = {
+                ch_id: [{"title": i.get("title"), "url": i.get("url")} for i in chapter_results[ch_id]]
+                for ch_id in chapter_results
+            }
+            with open(presearch_path, "w", encoding="utf-8") as f:
+                json.dump(presearch_data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+        return formatted
+
+    async def _execute_chapters(
+        self,
+        outline: ReportOutline,
+        session_dir: Path,
+    ) -> tuple[list[Path], list[Finding]]:
+        """Execute all chapters in parallel with pre-search and review loop.
+
+        Pipeline per chapter:
+        1. Pre-search (shared) -> research context
+        2. Single-shot chapter write (parallel across all chapters)
+        3. Revision loop (parallel across all chapters)
+        """
+        # --- Step 1: Pre-search all chapters ---
+        t0 = time.perf_counter()
+        research_contexts = await self._pre_search_chapters(outline.chapters, session_dir)
+        t1 = time.perf_counter()
+        logger.info(f"[Orchestrator] Pre-search done: {t1-t0:.2f}s")
+
+        # --- Step 2: Create workers and execute all chapters in parallel ---
+        workers = []
+        for ch in outline.chapters:
+            worker = ChapterWorker(
+                chapter_outline=ch,
+                session_dir=session_dir,
+            )
+            workers.append(worker)
+
+        logger.info(f"[Orchestrator] Executing {len(workers)} chapters in parallel")
+        t0 = time.perf_counter()
+        execute_tasks = [
+            worker.execute(research_context=research_contexts.get(ch.chapter_id, ""))
+            for worker, ch in zip(workers, outline.chapters)
+        ]
+        raw_findings = await asyncio.gather(*execute_tasks, return_exceptions=True)
+        t1 = time.perf_counter()
+        logger.info(f"[Orchestrator] All chapters written in {t1-t0:.2f}s")
+
+        # Collect findings and files
+        chapter_findings: list[Finding] = []
+        chapter_files: list[Path] = []
+        for worker, result in zip(workers, raw_findings):
+            if isinstance(result, Exception):
+                logger.error(f"[Orchestrator] Chapter {worker.outline.chapter_id} failed: {result}")
+                # Create fallback finding
+                result = Finding(
+                    task_id=worker.outline.chapter_id,
+                    role="chapter_writer",
+                    summary=f"{worker.outline.title}: 生成失败",
+                    details={
+                        "chapter_id": worker.outline.chapter_id,
+                        "title": worker.outline.title,
+                        "error": str(result),
+                    },
+                    confidence=0.0,
+                )
+            chapter_findings.append(result)
+            chapter_files.append(worker.chapter_file)
+
+        # --- Step 3: Run revision loops in parallel ---
+        logger.info(f"[Orchestrator] Running revision loops for {len(workers)} chapters in parallel")
+        t0 = time.perf_counter()
+        revision_tasks = [
+            self.reviser.revision_loop(
+                chapter_outline=ch,
+                chapter_file=worker.chapter_file,
+                worker=worker,
+            )
+            for worker, ch in zip(workers, outline.chapters)
+        ]
+        revision_results = await asyncio.gather(*revision_tasks, return_exceptions=True)
+        t1 = time.perf_counter()
+        logger.info(f"[Orchestrator] All revision loops done in {t1-t0:.2f}s")
+
+        for i, (result, finding) in enumerate(zip(revision_results, chapter_findings)):
+            if isinstance(result, Exception):
+                logger.error(f"[Orchestrator] Revision for {finding.task_id} failed: {result}")
+                finding.details["review_passed"] = False
+            else:
+                finding.details["review_passed"] = result
+
+        return chapter_files, chapter_findings
 
     async def _handle_clarification_response(
         self,
@@ -336,77 +544,13 @@ class OrchestratorAgent(BaseAgent):
             },
         )
 
-    async def _synthesize_from_findings(
-        self,
-        user_query: str,
-        findings: list,
-    ) -> str:
-        """Generate final report from all findings."""
-        if not findings:
-            return "未能获取足够的研究信息来生成报告。"
-
-        # Build synthesizer context with budget
-        findings_dicts = [f.to_dict() for f in findings]
-        context = self.context_manager.build_synthesizer_context(
-            user_query=user_query,
-            findings=findings_dicts,
-        )
-
-        prompt = f"""你是一位资深投资分析师。请基于以下研究发现，生成一份完整、专业、结构化的分析报告。
-
-{context}
-
-请生成最终报告，要求：
-1. 报告结构清晰，包含执行摘要、详细分析和结论
-2. 数据支撑充分，逻辑严谨
-3. 每个关键结论标注数据来源和置信度
-4. 承认信息缺口和不确定性
-5. 语言专业但易懂
-
-最终报告："""
-
-        try:
-            report = await self.llm_agent.run_simple(prompt)
-            return report
-        except Exception as e:
-            logger.error(f"Report synthesis failed: {e}")
-            # Fallback: concatenate summaries
-            summaries = [f"[{f.role}] {f.summary}" for f in findings]
-            return "\n\n".join(summaries)
-
-    def _build_sections(self, findings: list) -> dict[str, str]:
-        """Group findings by role for section display."""
-        sections: dict[str, list[str]] = {}
-        for f in findings:
-            role = f.role
-            if role not in sections:
-                sections[role] = []
-            sections[role].append(f.summary)
-        return {k: "\n\n".join(v) for k, v in sections.items()}
-
-    async def _generate_and_save_report(
-        self,
-        user_input: str,
-        final_report: str,
-        sections: dict[str, str],
-    ) -> tuple[Path | None, Path | None]:
-        """Generate markdown/PDF report and save."""
-        try:
-            output_dir = Path(get_settings().output.output_dir)
-            generator = ReportGenerator()
-            markdown = generator.generate_markdown(
-                user_query=user_input,
-                final_report=final_report,
-                sections=sections,
-                session_id=self.memory.session_id,
-            )
-            md_path, pdf_path = generator.save(
-                output_dir=output_dir,
-                session_id=self.memory.session_id,
-                markdown=markdown,
-            )
-            logger.info(f"[Orchestrator] Report saved: md={md_path}, pdf={pdf_path}")
-            return md_path, pdf_path
-        except Exception as e:
-            logger.warning(f"[Orchestrator] Report generation failed: {e}")
-            return None, None
+    def _build_sections_from_chapters(self, chapter_files: list[Path]) -> dict[str, str]:
+        """Build sections dict from chapter files for report metadata."""
+        sections: dict[str, str] = {}
+        for f in chapter_files:
+            if f.exists():
+                content = f.read_text(encoding="utf-8")
+                # Extract chapter title from first ## heading
+                title = f.stem  # e.g., "chapter_c1"
+                sections[title] = content
+        return sections

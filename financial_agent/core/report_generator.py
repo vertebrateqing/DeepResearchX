@@ -66,6 +66,7 @@ class ReportGenerator:
         sections: dict[str, str],
         session_id: str,
         timestamp: datetime | None = None,
+        is_v4: bool = False,
     ) -> str:
         """Generate a structured markdown report.
 
@@ -75,6 +76,7 @@ class ReportGenerator:
             sections: Dict of section_name -> section_content
             session_id: Session identifier
             timestamp: Report generation timestamp
+            is_v4: If True, final_report is a complete report (V4 mode).
 
         Returns:
             Markdown string
@@ -82,6 +84,80 @@ class ReportGenerator:
         ts = timestamp or datetime.now()
         ts_str = ts.strftime("%Y-%m-%d %H:%M:%S")
 
+        if is_v4:
+            return self._generate_v4_markdown(
+                user_query=user_query,
+                final_report=final_report,
+                session_id=session_id,
+                ts_str=ts_str,
+            )
+
+        return self._generate_legacy_markdown(
+            user_query=user_query,
+            final_report=final_report,
+            sections=sections,
+            session_id=session_id,
+            ts_str=ts_str,
+        )
+
+    def _generate_v4_markdown(
+        self,
+        user_query: str,
+        final_report: str,
+        session_id: str,
+        ts_str: str,
+    ) -> str:
+        """V4 mode: final_report is already a complete report."""
+        lines: list[str] = []
+
+        # Metadata header
+        lines.extend([
+            '<div class="meta">',
+            "",
+            f"**生成时间**: {ts_str}",
+            f"**会话ID**: {session_id}",
+            f"**用户查询**: {user_query}",
+            "",
+            "</div>",
+            "",
+            "---",
+            "",
+        ])
+
+        # Main report content
+        lines.append(final_report)
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+        # Disclaimer
+        lines.extend([
+            "## 免责声明",
+            "",
+            '<div class="disclaimer">',
+            "",
+            "**本报告仅供参考，不构成投资建议。**",
+            "",
+            "1. 报告内容基于AI模型生成，可能存在信息遗漏或解读偏差。",
+            "2. 投资有风险，入市需谨慎，请独立判断并承担投资风险。",
+            "3. 过往业绩不代表未来表现，市场数据可能存在延迟。",
+            "4. 建议在做出投资决策前咨询专业投资顾问。",
+            "",
+            "</div>",
+            "",
+        ])
+
+        return "\n".join(lines)
+
+    def _generate_legacy_markdown(
+        self,
+        user_query: str,
+        final_report: str,
+        sections: dict[str, str],
+        session_id: str,
+        ts_str: str,
+    ) -> str:
+        """Legacy V3 mode: build report from sections."""
         lines: list[str] = []
 
         # Title
@@ -111,7 +187,6 @@ class ReportGenerator:
             "- [执行摘要](#执行摘要)",
         ])
 
-        # Role → Chinese title mapping for PWS architecture
         role_titles = {
             "web_search": "信息检索",
             "data_fetch": "数据分析",
