@@ -39,11 +39,11 @@ ENV/
 .env.*.local
 
 # Data directories
-financial_agent/data/raw/*
-financial_agent/data/processed/*
-financial_agent/data/vector_db/*
-financial_agent/data/output/*
-financial_agent/data/sessions/*
+backend/financial_agent/data/raw/*
+backend/financial_agent/data/processed/*
+backend/financial_agent/data/vector_db/*
+backend/financial_agent/data/output/*
+backend/financial_agent/data/sessions/*
 !financial_agent/data/raw/.gitkeep
 !financial_agent/data/processed/.gitkeep
 !financial_agent/data/vector_db/.gitkeep
@@ -71,3 +71,6 @@ models/
 *.bin
 *.safetensors
 .claude/
+.frontend.pid
+.backend.pid
+frontend/node_modules/

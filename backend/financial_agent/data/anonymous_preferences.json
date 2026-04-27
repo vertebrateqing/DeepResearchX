@@ -1,0 +1,9 @@
+{
+  "investment_style": "balanced",
+  "risk_tolerance": "low",
+  "preferred_industries": [],
+  "excluded_industries": [],
+  "time_horizon": "long",
+  "top_n_default": 10,
+  "favorite_metrics": []
+}

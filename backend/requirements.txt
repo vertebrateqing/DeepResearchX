@@ -1,0 +1,28 @@
+# 后端依赖
+
+# FastAPI - 高性能的 Python Web 框架，用于构建 API
+fastapi>=0.110.0
+# Uvicorn - ASGI 服务器，用于运行 FastAPI 应用
+uvicorn[standard]>=0.27.0
+# SSE (Server-Sent Events) 支持，用于流式推送数据到前端
+sse-starlette>=2.0.0
+
+# 原有项目的依赖（保留）
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+httpx>=0.26.0
+tenacity>=8.2.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+chromadb>=0.4.0
+sentence-transformers>=2.3.0
+rank-bm25>=0.2.2
+jieba>=0.42.1
+numpy>=1.26.0
+pandas>=2.0.0
+akshare>=1.12.0
+tavily-python>=0.3.0
+duckduckgo-search>=4.0.0
+beautifulsoup4>=4.12.0
+markdown>=3.5.0
+weasyprint>=60.0
