@@ -1,5 +1,5 @@
 """
-Financial DeepResearch - FastAPI 后端入口
+DeepResearchX - FastAPI 后端入口
 
 这是整个后端服务的入口文件。
 FastAPI 是一个现代、高性能的 Python Web 框架，特点是：
@@ -24,7 +24,7 @@ from api.router import api_router
 
 # 创建 FastAPI 应用实例
 app = FastAPI(
-    title="Financial DeepResearch API",
+    title="DeepResearch API",
     description="A股投资分析系统后端 API，支持流式报告生成",
     version="1.0.0",
 )
@@ -36,7 +36,7 @@ async def configure_logging():
 
     Python's default root logger level is WARNING, which suppresses INFO.
     Uvicorn configures its own loggers but leaves the root logger at WARNING,
-    so logger.info() calls in financial_agent modules are silently dropped.
+    so logger.info() calls in deep_research modules are silently dropped.
     We raise the root level to INFO at startup so all modules' logs appear.
     """
     root = logging.getLogger()
@@ -73,4 +73,4 @@ app.include_router(api_router, prefix="/api")
 @app.get("/")
 async def root():
     """服务健康检查端点"""
-    return {"status": "ok", "service": "Financial DeepResearch API"}
+    return {"status": "ok", "service": "DeepResearch API"}

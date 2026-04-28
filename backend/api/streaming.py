@@ -18,9 +18,9 @@ import asyncio
 import uuid
 import logging
 from datetime import datetime
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
-from financial_agent.core.orchestrator import OrchestratorAgent
+from deep_research.core.orchestrator import OrchestratorAgent
 from api.models import StreamEvent
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 _task_store: dict[str, dict] = {}
 
 
-async def analyze_stream(query: str, model: str | None = None, session_id: str | None = None) -> AsyncGenerator[str, None]:
+async def analyze_stream(query: str, model: Optional[str] = None, session_id: Optional[str] = None, skip_clarification: bool = False) -> AsyncGenerator[str, None]:
     """
     执行分析并以 SSE 格式流式返回结果。
 
@@ -78,6 +78,7 @@ async def analyze_stream(query: str, model: str | None = None, session_id: str |
         orchestrator = OrchestratorAgent(
             session_id=session_id,
             progress_callback=on_progress,
+            skip_clarification=skip_clarification,
         )
 
         # 启动分析任务（在后台运行）

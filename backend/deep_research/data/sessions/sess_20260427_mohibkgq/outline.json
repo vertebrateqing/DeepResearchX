@@ -1,0 +1,191 @@
+{
+  "title": "2026年LLM Agent行业发展趋势与不易被基础模型升级取代的公司类型深度分析",
+  "executive_summary_points": [
+    "基础模型能力的持续提升将对工具型Agent形成显著替代压力，特别是代码生成、浏览器自动化等通用能力",
+    "垂直领域专用Agent基于行业知识积累、客户信任和数据飞轮效应，构建较强护城河",
+    "企业级定制Agent服务商的不可替代性来源于深度业务理解、定制化交付能力和企业数据资产保护",
+    "具备网络效应和数据飞轮的Agent平台有望形成赢家通吃格局"
+  ],
+  "strategy": "本报告采用分层递进的研究策略：首先收集市场规模、基础模型技术演进、市场玩家分布等基础数据（c1-c3），建立分析基准；然后分别从工具型Agent、垂直领域Agent、企业级服务等维度分析各类公司的护城河来源和替代风险（c4-c8）；最后综合各维度结论，形成不易被取代的公司类型画像（c9）。章节间存在明确的依赖链，确保分析推理建立在充分的数据基础之上。",
+  "metadata": {
+    "generated_at": "2026-04-28T02:05:25.631797",
+    "source": "llm"
+  },
+  "chapters": [
+    {
+      "chapter_id": "c1",
+      "title": "全球及中国LLM Agent市场规模与2026年增长预测",
+      "objective": "获取2024-2026年LLM Agent市场规模数据、主要玩家营收情况、增长驱动因素",
+      "suggested_tools": [
+        "tavily_search"
+      ],
+      "word_count": 600,
+      "key_questions": [
+        "2024-2025年全球LLM Agent市场规模是多少",
+        "2026年预计市场规模及增长率",
+        "中国LLM Agent市场占全球比例",
+        "市场规模增长的主要驱动因素有哪些"
+      ],
+      "depends_on": [],
+      "research_type": "data_collection"
+    },
+    {
+      "chapter_id": "c2",
+      "title": "主流基础模型厂商2025-2026年模型升级路径与技术能力演进",
+      "objective": "梳理OpenAI、Google、Anthropic、Meta等厂商的基础模型升级路线，特别是Agent相关能力的演进",
+      "suggested_tools": [
+        "tavily_search"
+      ],
+      "word_count": 800,
+      "key_questions": [
+        "OpenAI近两年模型升级的核心方向是什么",
+        "Google DeepMind的Agent相关能力有哪些进展",
+        "Anthropic在Agent能力上的布局",
+        "开源模型（如Llama）在Agent能力上的追赶情况"
+      ],
+      "depends_on": [],
+      "research_type": "data_collection"
+    },
+    {
+      "chapter_id": "c3",
+      "title": "LLM Agent市场主要参与者分类与典型玩家业务模式",
+      "objective": "识别市场上主要的Agent公司类型，包括工具型Agent、垂直领域Agent、企业级Agent平台等，并分析其商业模式",
+      "suggested_tools": [
+        "tavily_search"
+      ],
+      "word_count": 900,
+      "key_questions": [
+        "当前市场上有哪几类Agent公司",
+        "工具型Agent的典型玩家有哪些（如Browser Use、Replit Agent）",
+        "垂直领域Agent的典型玩家（如金融、医疗、法律）",
+        "企业级Agent平台的商业模式和主要玩家"
+      ],
+      "depends_on": [],
+      "research_type": "data_collection"
+    },
+    {
+      "chapter_id": "c4",
+      "title": "基础模型升级对不同类型Agent公司的影响机制分析",
+      "objective": "分析基础模型能力提升对各类Agent公司的影响机制，识别哪些能力会被基础模型直接覆盖",
+      "suggested_tools": [
+        "tavily_search"
+      ],
+      "word_count": 800,
+      "key_questions": [
+        "基础模型升级会直接覆盖哪些Agent能力",
+        "Agent公司相对于基础模型的核心价值是什么",
+        "基础模型厂商从纯模型向Agent延伸的战略意图",
+        "不同类型Agent公司受影响的程度差异"
+      ],
+      "depends_on": [
+        "c2",
+        "c3"
+      ],
+      "research_type": "analysis"
+    },
+    {
+      "chapter_id": "c5",
+      "title": "工具型Agent的技术壁垒与被替代风险深度分析",
+      "objective": "分析Browser Use、Replit Agent等工具型Agent的技术壁垒和被基础模型替代的风险",
+      "suggested_tools": [
+        "tavily_search"
+      ],
+      "word_count": 700,
+      "key_questions": [
+        "工具型Agent的核心技术是什么",
+        "基础模型升级如何威胁工具型Agent的生存空间",
+        "工具型Agent的护城河在哪里",
+        "工具型Agent公司应如何应对"
+      ],
+      "depends_on": [
+        "c2",
+        "c3",
+        "c4"
+      ],
+      "research_type": "analysis"
+    },
+    {
+      "chapter_id": "c6",
+      "title": "垂直领域专用Agent的护城河来源与持续性分析",
+      "objective": "分析金融、医疗、法律等垂直领域Agent的护城河来源，评估其持续性",
+      "suggested_tools": [
+        "tavily_search"
+      ],
+      "word_count": 800,
+      "key_questions": [
+        "垂直领域Agent需要哪些行业专业知识积累",
+        "行业数据和客户关系是否构成有效护城河",
+        "基础模型厂商进入垂直领域的难度在哪里",
+        "垂直领域Agent的数据飞轮效应如何形成"
+      ],
+      "depends_on": [
+        "c3",
+        "c4"
+      ],
+      "research_type": "analysis"
+    },
+    {
+      "chapter_id": "c7",
+      "title": "企业级定制Agent服务的长期价值与竞争壁垒",
+      "objective": "分析面向企业的定制化Agent服务（如Agent平台、中间件）的长期价值和竞争壁垒",
+      "suggested_tools": [
+        "tavily_search"
+      ],
+      "word_count": 700,
+      "key_questions": [
+        "企业级Agent服务的核心价值是什么",
+        "定制化交付能力为何难以被基础模型替代",
+        "企业数据安全和隐私考量如何保护Agent服务商",
+        "Salesforce、ServiceNow等平台型公司的Agent布局"
+      ],
+      "depends_on": [
+        "c3",
+        "c4"
+      ],
+      "research_type": "analysis"
+    },
+    {
+      "chapter_id": "c8",
+      "title": "数据飞轮效应与网络效应对Agent公司护城河的影响分析",
+      "objective": "分析具备数据飞轮和网络效应的Agent公司如何构建长期护城河",
+      "suggested_tools": [
+        "tavily_search"
+      ],
+      "word_count": 600,
+      "key_questions": [
+        "哪些类型的Agent公司能形成数据飞轮",
+        "网络效应在Agent市场如何体现",
+        "数据飞轮能否抵御基础模型升级的冲击",
+        "2026年数据飞轮效应的典型案例"
+      ],
+      "depends_on": [
+        "c3",
+        "c4"
+      ],
+      "research_type": "analysis"
+    },
+    {
+      "chapter_id": "c9",
+      "title": "2026年不易被基础模型升级取代的Agent公司类型综合结论",
+      "objective": "综合前文分析，总结哪类Agent公司不容易被基础模型升级取代，提出投资和战略建议",
+      "suggested_tools": [
+        "tavily_search"
+      ],
+      "word_count": 1000,
+      "key_questions": [
+        "哪类Agent公司最不容易被基础模型升级取代",
+        "各类不易被取代公司的核心护城河是什么",
+        "投资者应重点关注哪些类型的Agent公司",
+        "Agent公司应如何构建长期竞争优势"
+      ],
+      "depends_on": [
+        "c4",
+        "c5",
+        "c6",
+        "c7",
+        "c8"
+      ],
+      "research_type": "conclusion"
+    }
+  ]
+}

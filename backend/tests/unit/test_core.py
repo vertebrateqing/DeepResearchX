@@ -2,9 +2,9 @@
 
 import pytest
 
-from financial_agent.core.base import AgentContext, BaseAgent, BaseSkill, BaseTool, SkillContext
-from financial_agent.core.message import AgentMessage, MessageType
-from financial_agent.core.registry import Registry, get_registry, reset_registry
+from deep_research.core.base import AgentContext, BaseAgent, BaseSkill, BaseTool, SkillContext
+from deep_research.core.message import AgentMessage, MessageType
+from deep_research.core.registry import Registry, get_registry, reset_registry
 
 
 class DummyTool(BaseTool):
@@ -124,7 +124,7 @@ class TestBaseAgent:
 class TestReActAgent:
     @pytest.mark.asyncio
     async def test_react_loop_exhaustion_returns_error(self):
-        from financial_agent.core.agent import ReActAgent
+        from deep_research.core.agent import ReActAgent
 
         class FailingLLMClient:
             async def chat(self, **kwargs):

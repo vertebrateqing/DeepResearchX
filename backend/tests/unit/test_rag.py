@@ -2,7 +2,7 @@
 
 import pytest
 
-from financial_agent.rag.text_splitter import RecursiveTextSplitter
+from deep_research.rag.text_splitter import RecursiveTextSplitter
 
 
 class TestTextSplitter:
@@ -31,7 +31,7 @@ class TestTextSplitter:
 
 class TestDocumentLoader:
     def test_document_creation(self):
-        from financial_agent.rag.document_loader import Document
+        from deep_research.rag.document_loader import Document
 
         doc = Document(
             content="test content",
@@ -42,7 +42,7 @@ class TestDocumentLoader:
         assert doc.metadata["source"] == "test"
 
     def test_document_to_dict(self):
-        from financial_agent.rag.document_loader import Document
+        from deep_research.rag.document_loader import Document
 
         doc = Document(content="test", metadata={"key": "value"})
         d = doc.to_dict()
@@ -52,7 +52,7 @@ class TestDocumentLoader:
 
 class TestRAGMerge:
     def test_merge_keeps_best_score(self):
-        from financial_agent.rag.pipeline import _merge_retrieval_results
+        from deep_research.rag.pipeline import _merge_retrieval_results
 
         results = [
             [{"id": "doc1", "score": 0.9, "content": "a"}, {"id": "doc2", "score": 0.5, "content": "b"}],
@@ -66,13 +66,13 @@ class TestRAGMerge:
         assert scores == sorted(scores, reverse=True)
 
     def test_merge_empty(self):
-        from financial_agent.rag.pipeline import _merge_retrieval_results
+        from deep_research.rag.pipeline import _merge_retrieval_results
 
         assert _merge_retrieval_results([]) == []
         assert _merge_retrieval_results([[]]) == []
 
     def test_merge_missing_id_skipped(self):
-        from financial_agent.rag.pipeline import _merge_retrieval_results
+        from deep_research.rag.pipeline import _merge_retrieval_results
 
         results = [[{"score": 0.5, "content": "no id"}]]
         assert _merge_retrieval_results(results) == []

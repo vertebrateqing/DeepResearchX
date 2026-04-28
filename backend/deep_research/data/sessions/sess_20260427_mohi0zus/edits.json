@@ -1,0 +1,28 @@
+{
+  "edit_rounds": [
+    {
+      "passed": true,
+      "scores": {
+        "grammar_style": 7,
+        "factual_consistency": 7,
+        "completeness": 7,
+        "formatting": 7
+      },
+      "revision_suggestions": [],
+      "critical_issues": [],
+      "review_round": 0
+    },
+    {
+      "passed": true,
+      "scores": {
+        "grammar_style": 7,
+        "factual_consistency": 7,
+        "completeness": 7,
+        "formatting": 7
+      },
+      "revision_suggestions": [],
+      "critical_issues": [],
+      "review_round": 0
+    }
+  ]
+}

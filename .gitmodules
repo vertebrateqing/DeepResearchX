@@ -1,0 +1,3 @@
+[submodule "deep_research_bench"]
+	path = deep_research_bench
+	url = https://github.com/vertebrateqing/deep_research_bench.git

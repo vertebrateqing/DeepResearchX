@@ -12,6 +12,7 @@ FastAPI 的路由器（APIRouter）用来把相关的路由分组。
 查询参数：?query=xxx 这种叫查询参数
 """
 
+from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -48,9 +49,10 @@ async def create_analysis_task(request: AnalyzeRequest):
 
 @api_router.get("/analyze/stream")
 async def stream_analysis(
-    query: str = Query(..., description="用户的投资分析问题"),
-    model: str | None = Query(None, description="可选的 LLM 模型"),
-    session_id: str | None = Query(None, description="可选，已有会话 ID"),
+    query: str = Query(..., description="用户的研究问题"),
+    model: Optional[str] = Query(None, description="可选的 LLM 模型"),
+    session_id: Optional[str] = Query(None, description="可选，已有会话 ID"),
+    skip_clarification: bool = Query(False, description="跳过意图澄清（评测模式）"),
 ):
     """
     SSE 流式分析端点。
@@ -66,7 +68,7 @@ async def stream_analysis(
         StreamingResponse — SSE 格式的事件流
     """
     return StreamingResponse(
-        analyze_stream(query, model, session_id),
+        analyze_stream(query, model, session_id, skip_clarification),
         media_type="text/event-stream",
         headers={
             # 禁用缓存，确保每个事件都能实时到达前端

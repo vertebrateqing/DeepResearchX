@@ -2,7 +2,7 @@
 
 import pytest
 
-from financial_agent.core.registry import reset_registry
+from deep_research.core.registry import reset_registry
 
 
 class TestAKShareTool:
@@ -11,7 +11,7 @@ class TestAKShareTool:
 
     @pytest.mark.asyncio
     async def test_tool_schema(self):
-        from financial_agent.tools.akshare_data import AKShareTool
+        from deep_research.tools.akshare_data import AKShareTool
 
         tool = AKShareTool()
         schema = tool.get_schema()
@@ -24,7 +24,7 @@ class TestWebSearchTool:
         reset_registry()
 
     def test_tool_schema(self):
-        from financial_agent.tools.web_search import WebSearchTool
+        from deep_research.tools.web_search import WebSearchTool
 
         tool = WebSearchTool()
         schema = tool.get_schema()
@@ -37,7 +37,7 @@ class TestEmbeddingTool:
         reset_registry()
 
     def test_tool_schema(self):
-        from financial_agent.tools.embedding_call import EmbeddingTool
+        from deep_research.tools.embedding_call import EmbeddingTool
 
         tool = EmbeddingTool()
         schema = tool.get_schema()

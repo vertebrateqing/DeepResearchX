@@ -39,14 +39,14 @@ ENV/
 .env.*.local
 
 # Data directories
-backend/financial_agent/data/raw/*
-backend/financial_agent/data/processed/*
-backend/financial_agent/data/vector_db/*
-backend/financial_agent/data/output/*
-backend/financial_agent/data/sessions/*
-!financial_agent/data/raw/.gitkeep
-!financial_agent/data/processed/.gitkeep
-!financial_agent/data/vector_db/.gitkeep
+backend/deep_research/data/raw/*
+backend/deep_research/data/processed/*
+backend/deep_research/data/vector_db/*
+backend/deep_research/data/output/*
+backend/deep_research/data/sessions/*
+!backend/deep_research/data/raw/.gitkeep
+!backend/deep_research/data/processed/.gitkeep
+!backend/deep_research/data/vector_db/.gitkeep
 
 # Logs
 *.log

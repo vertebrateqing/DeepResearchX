@@ -1,0 +1,37 @@
+{
+  "name": "DeepResearchX General Benchmark",
+  "description": "General evaluation cases for multi-domain deep research agent",
+  "version": "0.2.0",
+  "test_cases": [
+    {
+      "id": "overview_001",
+      "category": "background_analysis",
+      "question": "请分析人工智能行业的整体发展现状，重点关注技术趋势和主要参与者",
+      "expected_answer": "应包含行业概况、技术发展阶段、主要厂商、市场规模等内容"
+    },
+    {
+      "id": "domain_001",
+      "category": "domain_research",
+      "question": "分析新能源汽车领域当前最值得关注的3-5个研究方向",
+      "expected_answer": "应包含具体方向名称、研究价值、发展趋势、挑战"
+    },
+    {
+      "id": "subject_001",
+      "category": "subject_analysis",
+      "question": "从科技行业中选取5家代表性企业进行深度分析",
+      "expected_answer": "应包含企业名称、核心业务、竞争优势、发展前景"
+    },
+    {
+      "id": "research_001",
+      "category": "deep_research",
+      "question": "深入研究大语言模型的技术发展路径与应用场景",
+      "expected_answer": "应包含技术演进、核心能力、典型应用、挑战与展望"
+    },
+    {
+      "id": "full_001",
+      "category": "full_research",
+      "question": "请为我研究并分析全球半导体行业的发展现状与未来趋势",
+      "expected_answer": "应包含行业概况、产业链分析、主要参与者、政策环境、发展趋势"
+    }
+  ]
+}
