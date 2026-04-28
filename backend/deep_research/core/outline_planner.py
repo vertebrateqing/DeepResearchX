@@ -196,7 +196,7 @@ class OutlinePlanner:
                 response = await self.llm.chat(
                     messages=messages,
                     model=self.model,
-                    max_tokens=4096,
+                    max_tokens=8192,
                 )
                 content = response["choices"][0]["message"].get("content", "")
                 outline = self._parse_outline(content)
@@ -219,15 +219,41 @@ class OutlinePlanner:
 
     def _parse_outline(self, content: str) -> ReportOutline | None:
         """Parse LLM response into ReportOutline."""
+        import re
+
+        # Step 1: Extract from markdown code block
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0]
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0]
+
+        content = content.strip().lstrip("\ufeff")
+
+        # Step 2: Replace Chinese quotation marks that break JSON
+        content = content.replace("\u201c", '"').replace("\u201d", '"')
+        content = content.replace("\u2018", "'").replace("\u2019", "'")
+
+        # Step 3: Try direct parse
+        data = None
         try:
-            # Extract JSON from markdown code block or raw text
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
-            data = json.loads(content.strip().lstrip("\ufeff"))
-        except (json.JSONDecodeError, IndexError) as e:
-            logger.warning(f"[OutlinePlanner] Failed to parse outline JSON: {e}")
+            data = json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.warning(f"[OutlinePlanner] Direct JSON parse failed: {e}, trying repair...")
+            logger.debug(f"[OutlinePlanner] Raw content (first 500): {content[:500]}")
+
+            # Step 4: Extract outermost {...} and retry
+            match = re.search(r'\{[\s\S]*\}', content)
+            if match:
+                try:
+                    data = json.loads(match.group(0))
+                except json.JSONDecodeError as e2:
+                    logger.warning(f"[OutlinePlanner] Failed to parse outline JSON: {e2}")
+                    return None
+            else:
+                logger.warning(f"[OutlinePlanner] Failed to parse outline JSON: {e}")
+                return None
+
+        if data is None:
             return None
 
         if not isinstance(data, dict) or "chapters" not in data:

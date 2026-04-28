@@ -46,7 +46,9 @@ async def run_single(client: httpx.AsyncClient, item: dict) -> dict:
                     continue
 
                 # Standard SSE: "event: <type>" line followed by "data: <json>" line
-                if raw_line.startswith("event:"):
+                if raw_line.startswith(":"):
+                    continue  # SSE comment/ping, ignore
+                elif raw_line.startswith("event:"):
                     current_event = raw_line[6:].strip()
                 elif raw_line.startswith("data:"):
                     json_str = raw_line[5:].strip()
@@ -127,6 +129,7 @@ def main() -> None:
     parser.add_argument("--query", default=str(DEFAULT_QUERY), help="Path to query.jsonl")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output JSONL path")
     parser.add_argument("--limit", type=int, default=None, help="Only run first N queries (for testing)")
+    parser.add_argument("--ids", type=str, default=None, help="Comma-separated query IDs to run, e.g. --ids 8,12,15")
     parser.add_argument("--concurrency", type=int, default=2, help="Max parallel queries")
     parser.add_argument("--backend", default=BACKEND_URL, help="Backend base URL")
     args = parser.parse_args()
@@ -146,7 +149,10 @@ def main() -> None:
             if line:
                 queries.append(json.loads(line))
 
-    if args.limit:
+    if args.ids:
+        target_ids = {int(i.strip()) for i in args.ids.split(",")}
+        queries = [q for q in queries if q.get("id") in target_ids]
+    elif args.limit:
         queries = queries[: args.limit]
 
     print(f"Loaded {len(queries)} queries from {query_path}")

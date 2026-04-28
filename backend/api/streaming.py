@@ -85,12 +85,19 @@ async def analyze_stream(query: str, model: Optional[str] = None, session_id: Op
         run_task = asyncio.create_task(orchestrator.run(query))
 
         # 并发消费进度事件队列，直到分析任务完成
+        import time as _time
+        _last_ping = _time.monotonic()
         while not run_task.done():
             try:
                 # 等待队列事件，超时后检查任务是否完成
                 event = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
                 yield _sse_format(event["event"], event["data"])
+                _last_ping = _time.monotonic()
             except asyncio.TimeoutError:
+                # Send SSE comment as keepalive every 30s to prevent connection timeout
+                if _time.monotonic() - _last_ping > 30:
+                    yield ": ping\n\n"
+                    _last_ping = _time.monotonic()
                 continue
 
         # 分析任务完成后，清空队列中剩余的事件
