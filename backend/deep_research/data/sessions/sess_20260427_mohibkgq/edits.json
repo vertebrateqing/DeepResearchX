@@ -48,6 +48,42 @@
         "缺少参考来源章节：全文引用标注达20+处，但缺乏统一的参考文献列表，引用规范不完整"
       ],
       "review_round": 1
+    },
+    {
+      "passed": true,
+      "scores": {
+        "grammar_style": 7,
+        "factual_consistency": 7,
+        "completeness": 7,
+        "formatting": 7
+      },
+      "revision_suggestions": [],
+      "critical_issues": [],
+      "review_round": 0
+    },
+    {
+      "passed": true,
+      "scores": {
+        "grammar_style": 7,
+        "factual_consistency": 7,
+        "completeness": 7,
+        "formatting": 7
+      },
+      "revision_suggestions": [],
+      "critical_issues": [],
+      "review_round": 0
+    },
+    {
+      "passed": true,
+      "scores": {
+        "grammar_style": 7,
+        "factual_consistency": 7,
+        "completeness": 7,
+        "formatting": 7
+      },
+      "revision_suggestions": [],
+      "critical_issues": [],
+      "review_round": 0
     }
   ]
 }

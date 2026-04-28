@@ -53,6 +53,7 @@ async def stream_analysis(
     model: Optional[str] = Query(None, description="可选的 LLM 模型"),
     session_id: Optional[str] = Query(None, description="可选，已有会话 ID"),
     skip_clarification: bool = Query(False, description="跳过意图澄清（评测模式）"),
+    confirmed_query: Optional[str] = Query(None, description="用户确认后的最终 prompt，直接用于研究"),
 ):
     """
     SSE 流式分析端点。
@@ -63,12 +64,13 @@ async def stream_analysis(
     参数：
         query: 用户的查询字符串（必填）
         model: 可选的 LLM 模型名称
+        confirmed_query: 用户在意图澄清卡片中编辑确认的最终 prompt
 
     返回：
         StreamingResponse — SSE 格式的事件流
     """
     return StreamingResponse(
-        analyze_stream(query, model, session_id, skip_clarification),
+        analyze_stream(query, model, session_id, skip_clarification, confirmed_query),
         media_type="text/event-stream",
         headers={
             # 禁用缓存，确保每个事件都能实时到达前端

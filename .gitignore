@@ -42,8 +42,11 @@ ENV/
 backend/deep_research/data/raw/*
 backend/deep_research/data/processed/*
 backend/deep_research/data/vector_db/*
+!backend/deep_research/data/vector_db/.gitkeep
 backend/deep_research/data/output/*
+!backend/deep_research/data/output/.gitkeep
 backend/deep_research/data/sessions/*
+!backend/deep_research/data/sessions/.gitkeep
 backend/deep_research/data/*.json
 !backend/deep_research/data/raw/.gitkeep
 !backend/deep_research/data/processed/.gitkeep

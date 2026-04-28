@@ -278,11 +278,39 @@ export default function App() {
           }
           break
 
-        case 'complete':
+        case 'clarification':
           updateAssistantMsg({
-            content: assistantContent,
             status: 'done',
+            clarification: {
+              question: event.data.question || '',
+              enrichedQuery: event.data.enriched_query || '',
+            },
           })
+          setIsStreaming(false)
+          if (streamRef.current) {
+            streamRef.current.close()
+            streamRef.current = null
+          }
+          break
+
+        case 'complete':
+          // Preserve clarification card if it was set — don't overwrite with empty content
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === targetId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === assistantMsg.id
+                        ? m.clarification
+                          ? { ...m, status: 'done' }
+                          : { ...m, content: assistantContent, status: 'done' }
+                        : m,
+                    ),
+                  }
+                : c,
+            ),
+          )
           setIsStreaming(false)
           if (streamRef.current) {
             streamRef.current.close()
@@ -304,7 +332,6 @@ export default function App() {
                         ...m,
                         status: 'error',
                         error: '连接后端服务失败，请检查后端是否运行',
-                        thinking: assistantThinking,
                       }
                     : m,
                 ),
@@ -315,6 +342,142 @@ export default function App() {
       setIsStreaming(false)
     })
   }, [input, isStreaming, currentId, currentConversation])
+
+  // ========================================================================
+  // 确认意图澄清：用用户编辑后的 enriched_query 直接开始研究
+  // ========================================================================
+
+  const handleConfirmClarification = useCallback((confirmedText: string) => {
+    if (!confirmedText.trim() || isStreaming) return
+
+    const convId = currentId
+    const sessionId = currentConversation?.sessionId
+    if (!convId || !sessionId) return
+
+    // 添加用户确认消息
+    const userMsg: Message = {
+      id: generateId(),
+      role: 'user',
+      content: confirmedText.trim(),
+      status: 'done',
+      createdAt: new Date().toISOString(),
+      sessionId,
+    }
+
+    // 添加 AI 占位消息
+    const assistantMsg: Message = {
+      id: generateId(),
+      role: 'assistant',
+      content: '',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      sessionId,
+      stage: 'outline',
+      progress: 10,
+      sources: [],
+    }
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === convId
+          ? {
+              ...c,
+              messages: [...c.messages, userMsg, assistantMsg],
+              updatedAt: new Date().toISOString(),
+            }
+          : c,
+      ),
+    )
+
+    setIsStreaming(true)
+
+    if (streamRef.current) {
+      streamRef.current.close()
+    }
+
+    // 用 confirmed_query 参数发送，后端直接跳过澄清进入研究
+    const stream = createAnalysisStream(confirmedText.trim(), sessionId, undefined, confirmedText.trim())
+    streamRef.current = stream
+
+    let assistantContent = ''
+
+    const updateAssistantMsg = (updates: Partial<Message>) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === convId
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === assistantMsg.id ? { ...m, ...updates } : m,
+                ),
+              }
+            : c,
+        ),
+      )
+    }
+
+    stream.onEvent((event: StreamEvent) => {
+      switch (event.event) {
+        case 'status':
+          updateAssistantMsg({
+            status: 'streaming',
+            thinking: event.data.message || '',
+            stage: event.data.stage || 'outline',
+            progress: event.data.progress,
+          })
+          break
+        case 'thinking':
+          updateAssistantMsg({ thinking: event.data.message || '' })
+          break
+        case 'tool_call':
+          updateAssistantMsg({ thinking: `调用 ${event.data.tool || '工具'}...` })
+          break
+        case 'content':
+          assistantContent += event.data.text || ''
+          updateAssistantMsg({ content: assistantContent, status: 'streaming' })
+          break
+        case 'sources': {
+          const newSource: SourceItem = {
+            title: event.data.title || '未命名来源',
+            url: event.data.url || '',
+            chapter: event.data.chapter,
+          }
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === convId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === assistantMsg.id
+                        ? { ...m, sources: [...(m.sources || []), newSource] }
+                        : m,
+                    ),
+                  }
+                : c,
+            ),
+          )
+          break
+        }
+        case 'error':
+          updateAssistantMsg({ status: 'error', error: event.data.message || '分析出错' })
+          setIsStreaming(false)
+          streamRef.current?.close()
+          streamRef.current = null
+          break
+        case 'complete':
+          updateAssistantMsg({ content: assistantContent, status: 'done' })
+          setIsStreaming(false)
+          streamRef.current?.close()
+          streamRef.current = null
+          break
+      }
+    })
+
+    stream.onError(() => {
+      updateAssistantMsg({ status: 'error', error: '连接后端服务失败，请检查后端是否运行' })
+      setIsStreaming(false)
+    })
+  }, [isStreaming, currentId, currentConversation])
 
   // ========================================================================
   // 键盘快捷键：Enter 发送，Shift+Enter 换行
@@ -381,7 +544,7 @@ export default function App() {
                 margin: 0,
               }}
             >
-              DeepResearch
+              DeepResearchX
             </h1>
           </div>
           <button
@@ -587,7 +750,7 @@ export default function App() {
                 fontWeight: 500,
               }}
             >
-              {currentConversation?.title || 'Financial DeepResearch'}
+              {currentConversation?.title || 'DeepResearchX'}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -665,7 +828,7 @@ export default function App() {
                   letterSpacing: '-0.02em',
                 }}
               >
-                Financial DeepResearch
+                DeepResearchX
               </h2>
               <p
                 style={{
@@ -677,8 +840,8 @@ export default function App() {
                   margin: '0 0 32px',
                 }}
               >
-                基于多智能体架构的深度 A 股投资分析系统。
-                输入股票代码或投资问题，AI 将为您生成专业级研究报告。
+                基于多智能体架构的通用深度研究系统。
+                输入任意研究问题，AI 将为您生成专业级分析报告。
               </p>
               <div
                 style={{
@@ -689,9 +852,9 @@ export default function App() {
                 }}
               >
                 {[
-                  '贵州茅台值得长期持有吗？',
-                  '分析 300750 宁德时代',
-                  '半导体板块近期走势如何？',
+                  '分析人工智能行业2025年发展趋势',
+                  '新能源汽车市场竞争格局分析',
+                  '全球半导体产业链现状与前景',
                 ].map((example) => (
                   <button
                     key={example}
@@ -734,6 +897,7 @@ export default function App() {
                   key={msg.id}
                   message={msg}
                   isLast={index === currentConversation.messages.length - 1}
+                  onConfirmClarification={handleConfirmClarification}
                 />
               ))}
               <div ref={messagesEndRef} />
@@ -778,7 +942,7 @@ export default function App() {
                 placeholder={
                   isStreaming
                     ? 'AI 正在分析，请稍候...'
-                    : '输入投资分析问题，例如：腾讯最近值得买入吗？'
+                    : '输入研究问题，例如：分析人工智能行业2025年发展趋势'
                 }
                 disabled={isStreaming}
                 rows={Math.min(5, input.split('\n').length + 1)}
@@ -837,7 +1001,7 @@ export default function App() {
                 fontFamily: 'var(--font-mono)',
               }}
             >
-              数据仅供参考，不构成投资建议 · Shift+Enter 换行
+              内容仅供参考 · Enter 发送 · Shift+Enter 换行
             </p>
           </div>
         </div>
@@ -853,12 +1017,23 @@ export default function App() {
 function MessageBubble({
   message,
   isLast,
+  onConfirmClarification,
 }: {
   message: Message
   isLast: boolean
+  onConfirmClarification?: (confirmedText: string) => void
 }) {
   const isUser = message.role === 'user'
   const [showThinking, setShowThinking] = useState(false)
+  const [editedQuery, setEditedQuery] = useState(message.clarification?.enrichedQuery || '')
+  const [confirmed, setConfirmed] = useState(false)
+
+  // Sync editedQuery when clarification data arrives (message updated from outside)
+  useEffect(() => {
+    if (message.clarification?.enrichedQuery && !editedQuery) {
+      setEditedQuery(message.clarification.enrichedQuery)
+    }
+  }, [message.clarification?.enrichedQuery])
 
   return (
     <div
@@ -922,6 +1097,38 @@ function MessageBubble({
         >
           {isUser ? (
             <span style={{ whiteSpace: 'pre-wrap' }}>{message.content}</span>
+          ) : message.clarification && !confirmed ? (
+            /* 意图澄清卡片 */
+            <ClarificationCard
+              question={message.clarification.question}
+              enrichedQuery={message.clarification.enrichedQuery}
+              editedQuery={editedQuery}
+              onEdit={setEditedQuery}
+              onConfirm={() => {
+                setConfirmed(true)
+                onConfirmClarification?.(editedQuery)
+              }}
+            />
+          ) : message.clarification && confirmed ? (
+            /* 已确认状态 */
+            <div
+              style={{
+                padding: '12px 16px',
+                background: 'var(--bg-surface-elevated)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
+                fontSize: '0.875rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              已确认，正在生成报告…
+            </div>
           ) : message.status === 'pending' || message.status === 'streaming' ? (
             /* 加载中 — 显示进度条和来源卡片 */
             <div
@@ -1079,6 +1286,187 @@ function MessageBubble({
           </span>
         </div>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ClarificationCard 组件 — 可编辑的意图澄清卡片
+// ---------------------------------------------------------------------------
+
+function ClarificationCard({
+  question,
+  enrichedQuery,
+  editedQuery,
+  onEdit,
+  onConfirm,
+}: {
+  question: string
+  enrichedQuery: string
+  editedQuery: string
+  onEdit: (v: string) => void
+  onConfirm: () => void
+}) {
+  const [focused, setFocused] = useState(false)
+
+  return (
+    <div
+      style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-md)',
+        overflow: 'hidden',
+        width: '100%',
+        maxWidth: 600,
+      }}
+    >
+      {/* 顶部：问题提示 */}
+      {question && (
+        <div
+          style={{
+            padding: '12px 16px',
+            borderBottom: '1px solid var(--border-subtle)',
+            background: 'var(--bg-surface-elevated)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              background: '#fef3c7',
+              border: '1.5px solid #d97706',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              marginTop: 1,
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: '0.875rem',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.55,
+            }}
+          >
+            {question}
+          </p>
+        </div>
+      )}
+
+      {/* 中部：可编辑的 enriched_query */}
+      <div style={{ padding: '12px 16px 8px' }}>
+        <p
+          style={{
+            margin: '0 0 8px',
+            fontSize: '0.75rem',
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-tertiary)',
+            letterSpacing: '0.02em',
+            textTransform: 'uppercase',
+          }}
+        >
+          已优化的研究提示词 · 可直接编辑
+        </p>
+        <div
+          style={{
+            border: `1.5px solid ${focused ? 'var(--accent-primary)' : 'var(--border-medium)'}`,
+            borderRadius: 'var(--radius-sm)',
+            transition: 'border-color 0.2s ease',
+            background: 'var(--bg-surface-elevated)',
+          }}
+        >
+          <textarea
+            value={editedQuery}
+            onChange={(e) => onEdit(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            rows={Math.min(10, editedQuery.split('\n').length + 2)}
+            style={{
+              width: '100%',
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              padding: '10px 12px',
+              fontFamily: 'var(--font-body)',
+              fontSize: '0.9rem',
+              lineHeight: 1.65,
+              color: 'var(--text-primary)',
+              resize: 'vertical',
+              minHeight: 80,
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* 底部：操作按钮 */}
+      <div
+        style={{
+          padding: '8px 16px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+        }}
+      >
+        <p
+          style={{
+            margin: 0,
+            fontSize: '0.75rem',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          确认后将以此作为研究提示词
+        </p>
+        <button
+          onClick={onConfirm}
+          disabled={!editedQuery.trim()}
+          style={{
+            padding: '8px 18px',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            background: editedQuery.trim() ? 'var(--accent-primary)' : 'var(--border-subtle)',
+            color: editedQuery.trim() ? '#fff' : 'var(--text-muted)',
+            fontFamily: 'var(--font-body)',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            cursor: editedQuery.trim() ? 'pointer' : 'not-allowed',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            transition: 'all 0.2s ease',
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => {
+            if (editedQuery.trim()) {
+              e.currentTarget.style.background = 'var(--accent-primary-hover)'
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (editedQuery.trim()) {
+              e.currentTarget.style.background = 'var(--accent-primary)'
+            }
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          确认并开始研究
+        </button>
+      </div>
     </div>
   )
 }

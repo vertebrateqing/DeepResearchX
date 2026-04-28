@@ -21,6 +21,7 @@ export type StreamEventType =
   | 'sources'
   | 'error'
   | 'complete'
+  | 'clarification'
 
 export interface StreamEvent {
   event: StreamEventType
@@ -100,6 +101,11 @@ export interface Message {
   stage?: string
   /** 当前进度 0-100（仅 assistant 消息，流式时更新） */
   progress?: number
+  /** 意图澄清数据（当后端需要用户确认 enriched_query 时） */
+  clarification?: {
+    question: string
+    enrichedQuery: string
+  }
 }
 
 /** 数据来源项 */

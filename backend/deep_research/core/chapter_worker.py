@@ -24,66 +24,66 @@ from deep_research.tools.web_search import WebSearchTool
 logger = logging.getLogger(__name__)
 
 
-def _build_chapter_system_prompt(outline: ChapterOutline) -> str:
-    """Build a system prompt tailored to the chapter's objectives."""
-    questions_text = "\n".join(f"- {q}" for q in outline.key_questions)
-
-    return f"""你是一位专业的研究分析师，负责撰写分析报告的一个独立章节。
-
-【当前章节】
-章节标题: {outline.title}
-研究目标: {outline.objective}
-建议字数: {outline.word_count} 字
-
-【关键问题】（本章必须回答）
-{questions_text}
+# Static system prompts — chapter-specific details go into user prompt for KV cache efficiency
+CHAPTER_SYSTEM_PROMPT = """你是一位专业的研究分析师，负责撰写分析报告的独立章节。
 
 【写作要求】
-1. 基于提供的预检索资料撰写完整章节，不要泛泛而谈
+1. 基于提供的章节要求撰写完整章节，不要泛泛而谈
 2. 内容必须直接回答关键问题，提供数据支撑的深度分析
-3. 所有数据必须标注来源，使用 [来源: 标题 / URL] 格式，URL 从预检索资料中获取；若无 URL 则使用 [来源: 标题]
+3. 所有数据必须标注来源，使用 [来源: 标题 / URL] 格式，URL 从资料中获取；若无 URL 则使用 [来源: 标题]
 4. 承认信息缺口和不确定性，不要编造数据
 5. 使用 Markdown 格式，包含必要的小标题、列表、表格
 6. 最终输出必须是完整的 Markdown 文本（不要包装在代码块中）
 7. 内容要有深度，提供数据支撑的分析，而不是简单的信息罗列
 
 【输出格式】
-在最终回答中，直接输出 Markdown 格式的章节正文。不需要 JSON 格式。
-章节正文应以二级标题（##）开头。"""
+直接输出 Markdown 格式的章节正文。不需要 JSON 格式。章节正文应以二级标题（##）开头。"""
 
-
-def _build_react_system_prompt(outline: ChapterOutline) -> str:
-    """Build ReAct system prompt for revise()."""
-    tools_hint = "、".join(outline.suggested_tools)
-    questions_text = "\n".join(f"- {q}" for q in outline.key_questions)
-
-    return f"""你是一位专业的研究分析师，负责修订分析报告的一个独立章节。
-
-【当前章节】
-章节标题: {outline.title}
-研究目标: {outline.objective}
-建议字数: {outline.word_count} 字
-
-【关键问题】（本章必须回答）
-{questions_text}
+REACT_SYSTEM_PROMPT = """你是一位专业的研究分析师，负责修订分析报告的独立章节。
 
 【可用工具】
-建议工具: {tools_hint}
 - tavily_search: 搜索互联网获取最新资讯、行业动态、相关信息
 - web_scraper: 抓取搜索结果网页全文，获取深度内容
 
 【写作要求】
 1. 针对评审反馈进行修改，基于工具收集的额外信息补充内容
 2. 内容必须直接回答关键问题，不要泛泛而谈
-3. 所有数据必须标注来源，使用 [来源: 标题 / URL] 格式；URL 在 web_search 结果的 "url" 字段、web_scraper 结果的 "url" 字段中；若无 URL 则使用 [来源: 标题]
+3. 所有数据必须标注来源，使用 [来源: 标题 / URL] 格式；URL 在 web_search/web_scraper 结果的 "url" 字段中；若无 URL 则使用 [来源: 标题]
 4. 承认信息缺口和不确定性，不要编造数据
 5. 使用 Markdown 格式，包含必要的小标题、列表、表格
 6. 最终输出必须是完整的 Markdown 文本（不要包装在代码块中）
 7. 内容要有深度，提供数据支撑的分析，而不是简单的信息罗列
 
 【输出格式】
-在最终回答中，直接输出 Markdown 格式的章节正文。不需要 JSON 格式。
-章节正文应以二级标题（##）开头。"""
+直接输出 Markdown 格式的章节正文。不需要 JSON 格式。章节正文应以二级标题（##）开头。"""
+
+
+def _build_chapter_user_prompt(outline: ChapterOutline) -> str:
+    """Build user prompt with chapter-specific details (keeps system prompt static)."""
+    questions_text = "\n".join(f"- {q}" for q in outline.key_questions)
+    return (
+        f"【章节要求】\n"
+        f"标题: {outline.title}\n"
+        f"研究目标: {outline.objective}\n"
+        f"建议字数: {outline.word_count} 字\n\n"
+        f"【关键问题】（本章必须回答）\n{questions_text}\n\n"
+        f"请撰写 '{outline.title}' 章节。"
+    )
+
+
+def _build_react_user_prompt(outline: ChapterOutline, feedback: str, current_text: str) -> str:
+    """Build user prompt for ReAct revision with chapter-specific details."""
+    questions_text = "\n".join(f"- {q}" for q in outline.key_questions)
+    return (
+        f"【章节要求】\n"
+        f"标题: {outline.title}\n"
+        f"研究目标: {outline.objective}\n"
+        f"建议字数: {outline.word_count} 字\n\n"
+        f"【关键问题】（本章必须回答）\n{questions_text}\n\n"
+        f"【当前内容】\n{current_text}\n\n"
+        f"【评审反馈】\n{feedback}\n\n"
+        f"请根据评审反馈修改章节，可调用工具补充信息。"
+    )
 
 
 class ChapterWorker:
@@ -114,13 +114,7 @@ class ChapterWorker:
         Returns:
             Finding with chapter metadata and file path.
         """
-        system_prompt = _build_chapter_system_prompt(self.outline)
-
-        user_input = (
-            f"请完成章节撰写：{self.outline.title}\n"
-            f"研究目标：{self.outline.objective}\n\n"
-            f"请撰写 '{self.outline.title}' 章节，目标字数约 {self.outline.word_count} 字。"
-        )
+        user_input = _build_chapter_user_prompt(self.outline)
 
         logger.info(
             f"[ChapterWorker {self.outline.chapter_id}] Starting (single-shot): "
@@ -132,7 +126,7 @@ class ChapterWorker:
         try:
             response = await self.llm.chat(
                 messages=[
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": CHAPTER_SYSTEM_PROMPT},
                     {"role": "user", "content": user_input},
                 ],
                 model=self.model,
@@ -193,24 +187,7 @@ class ChapterWorker:
             return
 
         current_text = self.chapter_file.read_text(encoding="utf-8")
-
-        prompt = f"""请根据评审反馈，修改和完善以下章节内容。
-
-【章节要求】
-标题: {self.outline.title}
-研究目标: {self.outline.objective}
-
-【当前内容】
-{current_text}
-
-【评审反馈】
-{feedback}
-
-请输出修改后的完整章节 Markdown 文本。要求：
-1. 针对反馈中指出的问题进行修改
-2. 可以调用工具收集额外信息来补充内容
-3. 保持章节的核心内容和结构
-4. 直接输出 Markdown，不要包装在代码块中"""
+        prompt = _build_react_user_prompt(self.outline, feedback, current_text)
 
         logger.info(f"[ChapterWorker {self.outline.chapter_id}] Revising via ReAct")
         t0 = time.perf_counter()
@@ -220,7 +197,7 @@ class ChapterWorker:
             filtered_tools = _filter_tools(self.tools, self.outline.suggested_tools)
             react_agent = ReActAgent(
                 name=f"chapter_worker_{self.outline.chapter_id}_reviser",
-                system_prompt=_build_react_system_prompt(self.outline),
+                system_prompt=REACT_SYSTEM_PROMPT,
                 tools=filtered_tools,
                 skills=self.skills,
                 model=self.model,

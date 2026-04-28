@@ -148,6 +148,46 @@ OUTLINE_SYSTEM_PROMPT = """你是一位资深研究报告规划专家。你的�
 }"""
 
 
+def _fix_json_string_escapes(text: str) -> str:
+    """Fix unescaped control characters inside JSON string literals.
+
+    LLMs sometimes emit literal newlines, tabs, or other control chars inside
+    JSON string values, which makes json.loads fail with 'Expecting delimiter'.
+    This function replaces bare control characters inside string literals with
+    their proper JSON escape sequences.
+    """
+    import re
+
+    result = []
+    in_string = False
+    escape_next = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if escape_next:
+            result.append(ch)
+            escape_next = False
+        elif ch == '\\' and in_string:
+            result.append(ch)
+            escape_next = True
+        elif ch == '"':
+            result.append(ch)
+            in_string = not in_string
+        elif in_string and ch == '\n':
+            result.append('\\n')
+        elif in_string and ch == '\r':
+            result.append('\\r')
+        elif in_string and ch == '\t':
+            result.append('\\t')
+        elif in_string and ord(ch) < 0x20:
+            # Other control characters
+            result.append(f'\\u{ord(ch):04x}')
+        else:
+            result.append(ch)
+        i += 1
+    return ''.join(result)
+
+
 class OutlinePlanner:
     """Generates structured report outlines using LLM."""
 
@@ -173,9 +213,7 @@ class OutlinePlanner:
         """
         today = datetime.now().strftime("%Y年%m月%d日")
 
-        prompt = f"""【当前真实日期】{today}
-
-用户需求：{user_query}
+        prompt = f"""用户需求：{user_query}
 
 请设计深度分析报告大纲。注意：
 - 章节标题必须具体（含研究对象+具体维度），禁止使用"市场分析"、"行业概况"等宽泛标题
@@ -183,7 +221,9 @@ class OutlinePlanner:
 - 分析/结论章节必须在 depends_on 中标注依赖的数据章节 id
 - 每个章节的 key_questions 必须是具体可回答的问题，而非宽泛描述
 
-直接输出JSON。"""
+直接输出JSON。
+
+【当前真实日期】{today}"""
 
         messages = [
             {"role": "system", "content": OUTLINE_SYSTEM_PROMPT},
@@ -239,19 +279,26 @@ class OutlinePlanner:
             data = json.loads(content)
         except json.JSONDecodeError as e:
             logger.warning(f"[OutlinePlanner] Direct JSON parse failed: {e}, trying repair...")
-            logger.debug(f"[OutlinePlanner] Raw content (first 500): {content[:500]}")
+            logger.warning(f"[OutlinePlanner] Failing content around error (char {e.pos}): {content[max(0,e.pos-80):e.pos+80]!r}")
 
-            # Step 4: Extract outermost {...} and retry
-            match = re.search(r'\{[\s\S]*\}', content)
-            if match:
-                try:
-                    data = json.loads(match.group(0))
-                except json.JSONDecodeError as e2:
-                    logger.warning(f"[OutlinePlanner] Failed to parse outline JSON: {e2}")
+            # Step 4: Fix unescaped control characters inside JSON strings.
+            # LLMs sometimes emit literal newlines/tabs inside string values.
+            repaired = _fix_json_string_escapes(content)
+
+            try:
+                data = json.loads(repaired)
+            except json.JSONDecodeError:
+                # Step 5: Extract outermost {...} and retry on repaired content
+                match = re.search(r'\{[\s\S]*\}', repaired)
+                if match:
+                    try:
+                        data = json.loads(match.group(0))
+                    except json.JSONDecodeError as e2:
+                        logger.warning(f"[OutlinePlanner] Failed to parse outline JSON: {e2}")
+                        return None
+                else:
+                    logger.warning(f"[OutlinePlanner] Failed to parse outline JSON after repair: {e}")
                     return None
-            else:
-                logger.warning(f"[OutlinePlanner] Failed to parse outline JSON: {e}")
-                return None
 
         if data is None:
             return None

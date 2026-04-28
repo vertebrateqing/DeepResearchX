@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 _task_store: dict[str, dict] = {}
 
 
-async def analyze_stream(query: str, model: Optional[str] = None, session_id: Optional[str] = None, skip_clarification: bool = False) -> AsyncGenerator[str, None]:
+async def analyze_stream(query: str, model: Optional[str] = None, session_id: Optional[str] = None, skip_clarification: bool = False, confirmed_query: Optional[str] = None) -> AsyncGenerator[str, None]:
     """
     执行分析并以 SSE 格式流式返回结果。
 
@@ -81,8 +81,11 @@ async def analyze_stream(query: str, model: Optional[str] = None, session_id: Op
             skip_clarification=skip_clarification,
         )
 
+        # 如果前端传入了用户确认的最终 prompt，直接用它研究，跳过澄清流程
+        effective_query = confirmed_query if confirmed_query else query
+
         # 启动分析任务（在后台运行）
-        run_task = asyncio.create_task(orchestrator.run(query))
+        run_task = asyncio.create_task(orchestrator.run(effective_query, confirmed_query=bool(confirmed_query)))
 
         # 并发消费进度事件队列，直到分析任务完成
         import time as _time
@@ -125,11 +128,15 @@ async def analyze_stream(query: str, model: Optional[str] = None, session_id: Op
             content = result.content if isinstance(result.content, dict) else {}
             # 处理需要澄清的情况
             if content.get("requires_clarification"):
-                yield _sse_format("content", {"text": content.get("prompt", "")})
+                yield _sse_format("clarification", {
+                    "question": content.get("prompt", ""),
+                    "enriched_query": content.get("enriched_query", ""),
+                })
+                yield _sse_format("complete", {"task_id": task_id, "message": "等待用户确认"})
             else:
                 # 正常报告
                 yield _sse_format("content", {"text": content.get("report", "")})
-            yield _sse_format("complete", {"task_id": task_id, "message": "分析完成"})
+                yield _sse_format("complete", {"task_id": task_id, "message": "分析完成"})
 
     except Exception as e:
         logger.exception(f"Task {task_id} failed")

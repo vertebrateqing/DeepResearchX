@@ -59,8 +59,6 @@ class ResearchPlanner:
 
         prompt = f"""你是一个研究规划专家。请根据用户需求，设计一份深度调研计划。
 
-【当前真实日期】{today}
-
 用户需求：{user_query}
 
 要求：
@@ -91,10 +89,12 @@ class ResearchPlanner:
       "inputs": {{}}
     }}
   ]
-}}"""
+}}
+
+【当前真实日期】{today}"""
 
         messages = [
-            {"role": "system", "content": f"你是一个研究规划助手。当前真实日期是{today}。你只输出JSON格式的研究计划。"},
+            {"role": "system", "content": "你是一个研究规划助手。你只输出JSON格式的研究计划。"},
             {"role": "user", "content": prompt},
         ]
 

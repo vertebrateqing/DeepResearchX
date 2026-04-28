@@ -30,7 +30,6 @@ from deep_research.core.finding import Finding
 from deep_research.core.intent_clarifier import (
     ClarificationResult,
     IntentClarifier,
-    MissingSlot,
 )
 from deep_research.core.integration import IntegrationAgent
 from deep_research.core.message import AgentMessage
@@ -106,22 +105,14 @@ class OrchestratorAgent(BaseAgent):
             self._clarification_result = ClarificationResult(
                 complete=False,
                 original_query=cs.get("original_query", ""),
-                merged_query=cs.get("merged_query", ""),
-                missing_slots=[
-                    MissingSlot(
-                        slot_name=s.get("slot_name", s.get("name", "")),
-                        slot_type=s.get("slot_type", "string"),
-                        question=s.get("question", ""),
-                        default_value=s.get("default_value"),
-                        confidence=s.get("confidence", 1.0),
-                        extracted_value=s.get("extracted_value"),
-                        confirmed=s.get("confirmed", False),
-                    )
-                    for s in cs.get("missing_slots", [])
-                ],
+                enriched_query=cs.get("enriched_query", ""),
+                clarification_question=cs.get("clarification_question", ""),
                 rounds_completed=cs.get("round", 0),
             )
-            logger.info(f"[Orchestrator] 恢复澄清状态: rounds={self._total_clarification_rounds}, slots={[s.slot_name for s in self._clarification_result.missing_slots]}")
+            logger.info(
+                f"[Orchestrator] 恢复澄清状态: rounds={self._total_clarification_rounds}, "
+                f"question={self._clarification_result.clarification_question[:50]}"
+            )
 
     def _emit(self, event_type: str, payload: dict) -> None:
         """Emit a progress event via the callback if configured."""
@@ -143,8 +134,15 @@ class OrchestratorAgent(BaseAgent):
         self,
         user_input: str,
         context: Optional[AgentContext] = None,
+        confirmed_query: bool = False,
     ) -> AgentMessage:
-        """Run the full deepresearch pipeline."""
+        """Run the full deepresearch pipeline.
+
+        Args:
+            user_input: User's query or confirmed enriched prompt.
+            confirmed_query: When True, user_input is already the final enriched
+                prompt confirmed by the user — skip clarification entirely.
+        """
         logger.info(f"Orchestrator received request: {user_input[:100]}...")
 
         # Record user message
@@ -152,6 +150,11 @@ class OrchestratorAgent(BaseAgent):
         detected_prefs = self.memory.detect_preferences_from_query(user_input)
         if detected_prefs:
             self.memory.update_preferences(**detected_prefs)
+
+        # If user confirmed enriched query from the clarification card, use directly
+        if confirmed_query:
+            self._clarification_result = None
+            return await self._execute_research(user_input, user_input, context)
 
         # Step 1: Handle ongoing clarification
         if self._clarification_result and not self._clarification_result.complete:
@@ -166,7 +169,7 @@ class OrchestratorAgent(BaseAgent):
             clarification = ClarificationResult(
                 complete=True,
                 original_query=user_input,
-                merged_query=user_input,
+                enriched_query=user_input,
             )
         else:
             clarification = await self.intent_clarifier.analyze(user_input)
@@ -177,40 +180,27 @@ class OrchestratorAgent(BaseAgent):
                 "status": "clarifying",
                 "round": clarification.rounds_completed,
                 "original_query": clarification.original_query,
-                "merged_query": clarification.merged_query,
-                "missing_slots": [
-                    {
-                        "slot_name": s.slot_name,
-                        "slot_type": s.slot_type,
-                        "question": s.question,
-                        "default_value": s.default_value,
-                        "confidence": s.confidence,
-                        "extracted_value": s.extracted_value,
-                        "confirmed": s.confirmed,
-                    }
-                    for s in clarification.missing_slots
-                ],
+                "enriched_query": clarification.enriched_query,
+                "clarification_question": clarification.clarification_question,
             }
             await self.memory.save(sync_long_term=False)
 
-            prompt = self.intent_clarifier.generate_clarification_prompt(clarification)
-            self.memory.add_assistant_message(prompt)
+            question_text = clarification.clarification_question
+            self.memory.add_assistant_message(question_text)
 
             return AgentMessage.create_result(
                 sender=self.name,
                 receiver="user",
                 result={
                     "requires_clarification": True,
-                    "prompt": prompt,
-                    "missing_slots": [
-                        s.slot_name for s in clarification.get_unconfirmed_slots()
-                    ],
+                    "prompt": question_text,
+                    "enriched_query": clarification.enriched_query,
                 },
             )
 
         # Step 3: Execute deepresearch
-        merged_query = clarification.merged_query or user_input
-        return await self._execute_research(merged_query, user_input, context)
+        enriched_query = clarification.enriched_query or user_input
+        return await self._execute_research(enriched_query, user_input, context)
 
     async def _execute_research(
         self,
@@ -222,7 +212,7 @@ class OrchestratorAgent(BaseAgent):
         from datetime import datetime
         now = datetime.now()
         date_context = f"【当前真实日期：{now.strftime('%Y年%m月%d日')}】"
-        enriched_query = f"{date_context}\n\n{merged_query}"
+        enriched_query = f"{merged_query}\n\n{date_context}"
 
         logger.info(f"[Orchestrator] Starting V4 pipeline for: {enriched_query[:100]}...")
         session_dir = self.session_dir
@@ -487,64 +477,25 @@ class OrchestratorAgent(BaseAgent):
                 error_message="No active clarification session",
             )
 
-        result = await self.intent_clarifier.process_user_response(
-            self._clarification_result,
-            user_response,
+        prev = self._clarification_result
+        result = await self.intent_clarifier.incorporate_response(
+            original_query=prev.original_query,
+            clarification_question=prev.clarification_question,
+            user_response=user_response,
         )
-        self._clarification_result = result
         self._total_clarification_rounds += 1
 
-        if result.complete:
-            confirmed_slots = [s for s in result.missing_slots if s.confirmed]
-            rewritten = await self.intent_clarifier.rewrite_query(
-                result.original_query,
-                confirmed_slots,
-            )
-            merged_query = rewritten or result.merged_query
-            logger.debug(f"Clarified query (LLM rewritten): {merged_query}...")
+        enriched_query = result.enriched_query or prev.original_query
+        logger.debug(f"[Orchestrator] Clarified enriched query: {enriched_query[:100]}...")
 
-            self.memory.session.clarification_state = {
-                "status": "completed",
-                "rounds": result.rounds_completed,
-                "merged_query": merged_query,
-            }
-            await self.memory.save()
-            self._clarification_result = None
-            return await self._execute_research(merged_query, result.original_query)
-
-        # Still needs more clarification
         self.memory.session.clarification_state = {
-            "status": "clarifying",
-            "round": result.rounds_completed,
-            "original_query": result.original_query,
-            "merged_query": result.merged_query,
-            "missing_slots": [
-                {
-                    "slot_name": s.slot_name,
-                    "slot_type": s.slot_type,
-                    "question": s.question,
-                    "default_value": s.default_value,
-                    "confidence": s.confidence,
-                    "extracted_value": s.extracted_value,
-                    "confirmed": s.confirmed,
-                }
-                for s in result.missing_slots
-            ],
+            "status": "completed",
+            "rounds": self._total_clarification_rounds,
+            "enriched_query": enriched_query,
         }
-        await self.memory.save(sync_long_term=False)
-
-        prompt = self.intent_clarifier.generate_clarification_prompt(result)
-        self.memory.add_assistant_message(prompt)
-
-        return AgentMessage.create_result(
-            sender=self.name,
-            receiver="user",
-            result={
-                "requires_clarification": True,
-                "prompt": prompt,
-                "round": result.rounds_completed,
-            },
-        )
+        await self.memory.save()
+        self._clarification_result = None
+        return await self._execute_research(enriched_query, prev.original_query)
 
     def _build_sections_from_chapters(self, chapter_files: list[Path]) -> dict[str, str]:
         """Build sections dict from chapter files for report metadata."""

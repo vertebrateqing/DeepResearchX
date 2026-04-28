@@ -40,28 +40,13 @@ class ReviewResult:
         }
 
 
-def _build_reviser_system_prompt(outline: ChapterOutline) -> str:
-    """Build a chapter-specific review prompt based on its research purpose."""
-    questions_text = "\n".join(f"  - {q}" for q in outline.key_questions)
-    type_desc = {
-        "data_collection": "数据收集章节（应提供充分的事实、数据和现状信息）",
-        "analysis": "分析推理章节（应基于数据进行深度推理，得出有据可查的分析结论）",
-        "conclusion": "综合结论章节（应整合前置章节的发现，给出清晰的综合判断和展望）",
-    }.get(outline.research_type, "研究章节")
-
-    return f"""你是一位资深研究报告质量评审专家。你的职责是审查本章节是否真正达成了其研究目的。
-
-【本章研究目的】
-章节类型: {type_desc}
-研究目标: {outline.objective}
-必须回答的关键问题:
-{questions_text}
+REVISER_SYSTEM_PROMPT = """你是一位资深研究报告质量评审专家。你的职责是审查章节是否真正达成了其研究目的。
 
 评审时，首先判断关键问题是否都得到了实质性回答，再评估其他维度。
 
 评审维度（每项 1-10 分，10分为最佳）：
-1. objective_achieved (目标达成度): 章节是否真正回答了上述关键问题？研究目的是否达成？
-2. research_depth (研究深度): 分析是否有深度？是否停留在表面描述？是否有独到洞察和证据支撑？
+1. objective_achieved (目标达成度): 章节是否真正回答了关键问题？研究目的是否达成？
+2. research_depth (研究深度): 分析是否有深度？是否有独到洞察和证据支撑？
 3. data_reliability (信息可靠性): 信息是否有明确来源？关键论据是否准确？
 4. rigor (严谨程度): 逻辑是否自洽？论证是否充分？结论是否有支撑？
 5. formatting (格式规范): Markdown 格式是否正确？标题层级是否合理？
@@ -69,18 +54,39 @@ def _build_reviser_system_prompt(outline: ChapterOutline) -> str:
 通过标准：总分 >= 35 且 单项 >= 6 且 objective_achieved >= 7
 
 输出格式（严格JSON，不要任何解释文字）：
-{{
+{
   "passed": true/false,
-  "scores": {{
+  "scores": {
     "objective_achieved": 8,
     "research_depth": 7,
     "data_reliability": 7,
     "rigor": 7,
     "formatting": 8
-  }},
+  },
   "feedback": "具体评审意见，重点说明关键问题是否被回答，未通过时详细说明需要改进的地方。",
-  "action_required": "revise" 或 "accept"
-}}"""
+  "action_required": "revise 或 accept"
+}"""
+
+
+def _build_reviser_user_prompt(outline: ChapterOutline, chapter_text: str, word_count: int) -> str:
+    """Build user prompt with chapter-specific context for review."""
+    questions_text = ", ".join(outline.key_questions)
+    type_desc = {
+        "data_collection": "数据收集章节（应提供充分的事实、数据和现状信息）",
+        "analysis": "分析推理章节（应基于数据进行深度推理，得出有据可查的分析结论）",
+        "conclusion": "综合结论章节（应整合前置章节的发现，给出清晰的综合判断和展望）",
+    }.get(outline.research_type, "研究章节")
+    return (
+        f"请评审以下分析报告章节。\n\n"
+        f"【章节要求】\n"
+        f"标题: {outline.title}\n"
+        f"章节类型: {type_desc}\n"
+        f"目标: {outline.objective}\n"
+        f"关键问题: {questions_text}\n"
+        f"建议字数: {outline.word_count} 字 | 实际字数: {word_count} 字\n\n"
+        f"【章节内容】\n{chapter_text}\n\n"
+        f"请严格按照评审标准进行评分，并输出JSON格式的评审结果。"
+    )
 
 
 class ReviserAgent:
@@ -123,20 +129,7 @@ class ReviserAgent:
 
         chapter_text = chapter_file.read_text(encoding="utf-8")
         word_count = len(chapter_text)
-
-        prompt = f"""请评审以下分析报告章节。
-
-【章节要求】
-标题: {chapter_outline.title}
-目标: {chapter_outline.objective}
-关键问题: {', '.join(chapter_outline.key_questions)}
-建议字数: {chapter_outline.word_count} 字
-实际字数: {word_count} 字
-
-【章节内容】
-{chapter_text}
-
-请严格按照评审标准进行评分，并输出JSON格式的评审结果。"""
+        prompt = _build_reviser_user_prompt(chapter_outline, chapter_text, word_count)
 
         logger.info(
             f"[Reviser] Reviewing chapter {chapter_outline.chapter_id} "
@@ -146,7 +139,7 @@ class ReviserAgent:
         try:
             response = await self.llm.chat(
                 messages=[
-                    {"role": "system", "content": _build_reviser_system_prompt(chapter_outline)},
+                    {"role": "system", "content": REVISER_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
                 model=self.model,
