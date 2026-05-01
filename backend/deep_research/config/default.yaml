@@ -134,3 +134,14 @@ logging:
   level: INFO  # 性能观测阶段用 INFO，减少 DEBUG 噪音
   format: console  # json / console，开发阶段用 console 更易读
   file: null  # 日志文件路径，null则只输出到控制台
+
+# Langfuse 可观测性配置（默认关闭）
+# 启用方式：设置 LANGFUSE_ENABLED=true，并配置 key/host
+langfuse:
+  enabled: false
+  public_key: ${LANGFUSE_PUBLIC_KEY:-}
+  secret_key: ${LANGFUSE_SECRET_KEY:-}
+  host: ${LANGFUSE_HOST:-http://localhost:3000}
+  dataset_name: deepresearchx-production
+  flush_at: 15
+  flush_interval: 0.5

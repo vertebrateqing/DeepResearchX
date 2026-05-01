@@ -23,6 +23,7 @@ import asyncio
 
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient, SimpleAgent
+from deep_research.observability import get_langfuse, make_trace_context
 from deep_research.core.base import AgentContext, BaseAgent, BaseSkill, BaseTool
 from deep_research.core.chapter_worker import ChapterWorker, _extract_sources_from_text
 from deep_research.core.editor import EditorAgent
@@ -145,6 +146,28 @@ class OrchestratorAgent(BaseAgent):
         """
         logger.info(f"Orchestrator received request: {user_input[:100]}...")
 
+        # Create Langfuse trace for this request (v4: pre-allocate trace_id, root span is the trace)
+        lf = get_langfuse()
+        if lf:
+            self._trace_id: Optional[str] = lf.create_trace_id()
+            tc = make_trace_context(self._trace_id)
+            self._lf_root_span = lf.start_observation(
+                trace_context=tc,
+                name="deepresearch",
+                as_type="agent",
+                input={"query": user_input},
+                metadata={"model": get_settings().llm.model, "session_id": self.memory.session_id},
+            )
+        else:
+            self._trace_id = None
+            self._lf_root_span = None
+
+        # Propagate trace_id to all component LLM clients
+        for component in (self.llm_agent, self.intent_clarifier, self.outline_planner,
+                          self.reviser, self.integration, self.editor):
+            if hasattr(component, "llm"):
+                component.llm._trace_id = self._trace_id
+
         # Record user message
         self.memory.add_user_message(user_input)
         detected_prefs = self.memory.detect_preferences_from_query(user_input)
@@ -218,6 +241,10 @@ class OrchestratorAgent(BaseAgent):
         session_dir = self.session_dir
         session_dir.mkdir(parents=True, exist_ok=True)
 
+        lf = get_langfuse()
+        trace_id = getattr(self, "_trace_id", None)
+        tc = make_trace_context(trace_id)
+
         # Record main task
         main_task = self.memory.start_task(
             task_type="deepresearch",
@@ -229,11 +256,15 @@ class OrchestratorAgent(BaseAgent):
         self._emit("status", {"message": "正在规划报告结构...", "stage": "outline", "progress": 10})
         logger.info("[Orchestrator] Phase 1: Generating report outline")
         t0 = time.perf_counter()
+        span_outline = lf.start_observation(trace_context=tc, name="outline_planning", as_type="chain", input={"query": enriched_query}) if lf and tc else None
         outline = await self.outline_planner.generate_outline(
             user_query=enriched_query,
             save_dir=session_dir,
         )
         t1 = time.perf_counter()
+        if span_outline:
+            span_outline.update(output={"title": outline.title, "chapters": [c.chapter_id for c in outline.chapters]}, metadata={"latency_s": round(t1 - t0, 3)})
+            span_outline.end()
         logger.info(
             f"[Orchestrator] Phase 1 DONE: outline_gen={t1-t0:.2f}s, "
             f"title='{outline.title}', chapters={len(outline.chapters)}"
@@ -248,14 +279,19 @@ class OrchestratorAgent(BaseAgent):
         self._emit("status", {"message": "正在并行分析各章节...", "stage": "chapters", "progress": 30})
         logger.info("[Orchestrator] Phase 2: Executing chapters with review")
         t0 = time.perf_counter()
+        span_chapters = lf.start_observation(trace_context=tc, name="chapter_execution", as_type="chain") if lf and tc else None
         chapter_files, chapter_findings = await self._execute_chapters(
             outline=outline,
             session_dir=session_dir,
+            trace_id=trace_id,
         )
         t1 = time.perf_counter()
         passed_count = sum(
             1 for f in chapter_findings if f.details.get("review_passed", True)
         )
+        if span_chapters:
+            span_chapters.update(output={"chapters": len(chapter_files), "passed": passed_count}, metadata={"latency_s": round(t1 - t0, 3)})
+            span_chapters.end()
         logger.info(
             f"[Orchestrator] Phase 2 DONE: chapter_exec={t1-t0:.2f}s, "
             f"chapters={len(chapter_files)}, passed={passed_count}"
@@ -265,6 +301,8 @@ class OrchestratorAgent(BaseAgent):
         self._emit("status", {"message": "正在整合各章节...", "stage": "integration", "progress": 60})
         logger.info("[Orchestrator] Phase 3: Integrating chapters")
         t0 = time.perf_counter()
+        span_integration = lf.start_observation(trace_context=tc, name="integration", as_type="chain") if lf and tc else None
+        self.integration.llm._trace_id = trace_id
         draft_path = await self.integration.integrate(
             title=outline.title,
             summary_points=outline.executive_summary_points,
@@ -272,14 +310,22 @@ class OrchestratorAgent(BaseAgent):
             session_dir=session_dir,
         )
         t1 = time.perf_counter()
+        if span_integration:
+            span_integration.update(metadata={"latency_s": round(t1 - t0, 3)})
+            span_integration.end()
         logger.info(f"[Orchestrator] Phase 3 DONE: integration={t1-t0:.2f}s, draft={draft_path}")
 
         # --- Phase 4: Editor review & polish ---
         self._emit("status", {"message": "正在审校和润色报告...", "stage": "editing", "progress": 75})
         logger.info("[Orchestrator] Phase 4: Editorial review")
         t0 = time.perf_counter()
+        span_editing = lf.start_observation(trace_context=tc, name="editorial_review", as_type="chain") if lf and tc else None
+        self.editor.llm._trace_id = trace_id
         final_draft = await self.editor.edit_loop(draft_path, session_dir)
         t1 = time.perf_counter()
+        if span_editing:
+            span_editing.update(metadata={"latency_s": round(t1 - t0, 3)})
+            span_editing.end()
         logger.info(f"[Orchestrator] Phase 4 DONE: editing={t1-t0:.2f}s, final={final_draft}")
 
         # --- Phase 5: Generate and save report ---
@@ -326,6 +372,30 @@ class OrchestratorAgent(BaseAgent):
         self.memory.add_assistant_message(final_text[:500])
         await self.memory.save()
 
+        # Write to Langfuse dataset and finalize trace
+        if lf and trace_id:
+            try:
+                cfg = get_settings().langfuse
+                # Create dataset (idempotent — won't error if already exists)
+                try:
+                    lf.create_dataset(name=cfg.dataset_name)
+                except Exception:
+                    pass
+                lf.create_dataset_item(
+                    dataset_name=cfg.dataset_name,
+                    input={"query": original_query, "enriched_query": merged_query},
+                    expected_output=final_text,
+                    source_trace_id=trace_id,
+                    metadata={"session_id": self.memory.session_id},
+                )
+                # Finalize root span
+                if self._lf_root_span:
+                    self._lf_root_span.update(output={"report_length": len(final_text), "status": "success"})
+                    self._lf_root_span.end()
+                lf.flush()
+            except Exception as _lf_err:
+                logger.warning(f"[Orchestrator] Langfuse dataset write failed: {_lf_err}")
+
         metadata: dict[str, Any] = {}
         if md_path:
             metadata["report_md_path"] = str(md_path)
@@ -351,6 +421,7 @@ class OrchestratorAgent(BaseAgent):
         self,
         outline: ReportOutline,
         session_dir: Path,
+        trace_id: Optional[str] = None,
     ) -> tuple[list[Path], list[Finding]]:
         """Execute chapters respecting dependency order (topological).
 
@@ -427,7 +498,7 @@ class OrchestratorAgent(BaseAgent):
         t0 = time.perf_counter()
 
         workers_for_revision = [
-            ChapterWorker(chapter_outline=ch, session_dir=session_dir)
+            ChapterWorker(chapter_outline=ch, session_dir=session_dir, trace_id=trace_id)
             for ch in outline.chapters
         ]
         revision_tasks = [
@@ -461,7 +532,8 @@ class OrchestratorAgent(BaseAgent):
         session_dir: Path,
     ) -> tuple[Path, Finding]:
         """Execute a single chapter: create worker, write, return file and finding."""
-        worker = ChapterWorker(chapter_outline=chapter, session_dir=session_dir)
+        trace_id = getattr(self, "_trace_id", None)
+        worker = ChapterWorker(chapter_outline=chapter, session_dir=session_dir, trace_id=trace_id)
         finding = await worker.execute()
         return worker.chapter_file, finding
 

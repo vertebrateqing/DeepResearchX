@@ -97,14 +97,20 @@ class ChapterWorker:
         skills: Optional[list[BaseSkill]] = None,
         model: Optional[str] = None,
         max_iterations: int = 10,
+        trace_id: Optional[str] = None,
     ):
         self.outline = chapter_outline
         self.session_dir = session_dir
         self.chapter_file = session_dir / f"chapter_{chapter_outline.chapter_id}.md"
         self.model = model or get_settings().llm.model
         self.llm = LLMClient()
+        self.llm._trace_id = trace_id
         self.max_iterations = max_iterations
         self.tools = tools or _default_tools()
+        # Propagate trace_id to all tools
+        for tool in self.tools:
+            if hasattr(tool, "_trace_id"):
+                tool._trace_id = trace_id
         self.skills = skills
         self._sources: list[Source] = []
 
@@ -193,12 +199,10 @@ class ChapterWorker:
         t0 = time.perf_counter()
 
         try:
-            # Use ReActAgent for revision (preserving ReAct framework)
-            filtered_tools = _filter_tools(self.tools, self.outline.suggested_tools)
             react_agent = ReActAgent(
                 name=f"chapter_worker_{self.outline.chapter_id}_reviser",
                 system_prompt=REACT_SYSTEM_PROMPT,
-                tools=filtered_tools,
+                tools=self.tools,
                 skills=self.skills,
                 model=self.model,
                 max_iterations=self.max_iterations,
@@ -240,22 +244,6 @@ def _default_tools() -> list[BaseTool]:
         WebScraperTool(),
     ]
 
-
-def _filter_tools(
-    all_tools: list[BaseTool],
-    suggested: list[str],
-) -> list[BaseTool]:
-    """Filter tools based on chapter's suggested tools."""
-    # Map suggested tool names to actual tool instances
-    name_map = {t.name: t for t in all_tools}
-    filtered = []
-    for name in suggested:
-        if name in name_map:
-            filtered.append(name_map[name])
-    # Always include tavily_search as fallback
-    if "tavily_search" in name_map and "tavily_search" not in suggested:
-        filtered.append(name_map["tavily_search"])
-    return filtered if filtered else all_tools[:2]
 
 
 def _unwrap_markdown(text: str) -> str:

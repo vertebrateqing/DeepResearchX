@@ -119,6 +119,18 @@ class OutputConfig(BaseSettings):
     output_dir: str = "./deep_research/data/output"
 
 
+class LangfuseConfig(BaseSettings):
+    enabled: bool = False
+    public_key: Optional[str] = None
+    secret_key: Optional[str] = None
+    host: str = "http://localhost:3000"
+    dataset_name: str = "deepresearchx-production"
+    flush_at: int = 15
+    flush_interval: float = 0.5
+
+    model_config = SettingsConfigDict(env_prefix="LANGFUSE_")
+
+
 class Settings(BaseSettings):
     """Application settings loaded from YAML and environment variables."""
 
@@ -136,6 +148,7 @@ class Settings(BaseSettings):
     vlm: VLMConfig = Field(default_factory=VLMConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+    langfuse: LangfuseConfig = Field(default_factory=LangfuseConfig)
 
     @classmethod
     def from_yaml(cls, path: Union[str, Path] = DEFAULT_CONFIG_PATH) -> "Settings":

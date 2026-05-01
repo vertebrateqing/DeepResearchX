@@ -12,6 +12,7 @@ from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
 
 from deep_research.config.settings import get_settings
 from deep_research.core.base import AgentContext, BaseAgent, BaseSkill, BaseTool
+from deep_research.observability import get_langfuse, make_trace_context
 from deep_research.core.context import AgentRunContext
 from deep_research.core.message import AgentMessage, MessageType
 
@@ -34,6 +35,7 @@ class LLMClient:
         self.settings = get_settings().llm
         self._client: Optional[httpx.AsyncClient] = None
         self._timeout = timeout
+        self._trace_id: Optional[str] = None
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -123,6 +125,17 @@ class LLMClient:
 
         logger.debug(f"LLM request: {json.dumps(payload, ensure_ascii=False)}")
 
+        lf = get_langfuse()
+        tc = make_trace_context(self._trace_id)
+        generation = lf.start_observation(
+            trace_context=tc,
+            name="llm_call",
+            as_type="generation",
+            model=model or self.settings.model,
+            input=messages,
+            metadata={"tools_enabled": bool(tools)},
+        ) if lf and tc else None
+
         t0 = time.perf_counter()
         response = await self.client.post(url, headers=headers, json=payload)
         response.raise_for_status()
@@ -144,10 +157,18 @@ class LLMClient:
             f"completion_tokens={usage.get('completion_tokens', '?')}, "
             f"has_tool_calls={has_tools}, content_len={len(content)}"
         )
-        # Log full response content and reasoning without truncation
         logger.debug(f"LLM response full: {json.dumps(result, ensure_ascii=False)}")
         if content:
             logger.debug(f"LLM content: {content}")
+
+        if generation:
+            generation.update(
+                output=content,
+                usage_details={"input": usage.get("prompt_tokens") or 0, "output": usage.get("completion_tokens") or 0},
+                metadata={"latency_s": round(llm_latency, 3), "has_tool_calls": has_tools},
+            )
+            generation.end()
+
         return result
 
     def _normalize_response(self, result: dict[str, Any]) -> dict[str, Any]:

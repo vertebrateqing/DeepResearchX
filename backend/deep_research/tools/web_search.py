@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from deep_research.config.settings import get_settings
 from deep_research.core.base import BaseTool
+from deep_research.observability import get_langfuse, make_trace_context
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class WebSearchTool(BaseTool):
         self.scraper_settings = get_settings().data_sources.web_scraper
         self._tavily_client: Optional[Any] = None
         self._scraper: Optional[Any] = None
+        self._trace_id: Optional[str] = None
 
     def _get_tavily_client(self) -> Any:
         if self._tavily_client is None:
@@ -74,6 +76,17 @@ class WebSearchTool(BaseTool):
         scrape: bool = True,
     ) -> dict[str, Any]:
         """Execute web search, optionally scraping result URLs."""
+        lf = get_langfuse()
+        tc = make_trace_context(self._trace_id)
+        span = lf.start_observation(
+            trace_context=tc,
+            name="web_search",
+            as_type="retriever",
+            input={"query": query, "max_results": max_results, "provider": self.settings.provider},
+        ) if lf and tc else None
+
+        t0 = time.perf_counter()
+
         if self.settings.provider == "tavily":
             result = await self._search_tavily(query, max_results, search_depth)
         else:
@@ -91,6 +104,12 @@ class WebSearchTool(BaseTool):
                     logger.info(
                         f"[WebSearch] Extracted {len(chunks)} chunks from Tavily raw_content"
                     )
+                    if span:
+                        span.update(output={
+                            "urls": [r["url"] for r in result.get("results", [])],
+                            "top_chunks": [{"url": c["url"], "title": c.get("title", ""), "text": c["text"][:500]} for c in chunks],
+                        }, metadata={"latency_s": round(time.perf_counter() - t0, 3), "source": "tavily_raw"})
+                        span.end()
                     return result
 
             # Fall back to manual scraping for DuckDuckGo or when Tavily raw_content is empty
@@ -116,6 +135,14 @@ class WebSearchTool(BaseTool):
                     logger.warning(f"[WebSearch] URL scraping failed: {e}")
                     result["scraped_chunks"] = []
                     result["scraped_total_chunks"] = 0
+
+        if span:
+            chunks = result.get("scraped_chunks", [])
+            span.update(output={
+                "urls": [r["url"] for r in result.get("results", [])],
+                "top_chunks": [{"url": c["url"], "title": c.get("title", ""), "text": c["text"][:500]} for c in chunks],
+            }, metadata={"latency_s": round(time.perf_counter() - t0, 3), "source": "scraped"})
+            span.end()
 
         return result
 
