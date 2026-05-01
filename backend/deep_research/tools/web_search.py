@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from deep_research.config.settings import get_settings
 from deep_research.core.base import BaseTool
-from deep_research.observability import get_langfuse, make_trace_context
+from deep_research.observability import get_langfuse
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +77,11 @@ class WebSearchTool(BaseTool):
     ) -> dict[str, Any]:
         """Execute web search, optionally scraping result URLs."""
         lf = get_langfuse()
-        tc = make_trace_context(self._trace_id)
-        span = lf.start_observation(
-            trace_context=tc,
+        span = lf.span(
+            trace_id=self._trace_id,
             name="web_search",
-            as_type="retriever",
             input={"query": query, "max_results": max_results, "provider": self.settings.provider},
-        ) if lf and tc else None
+        ) if lf and self._trace_id else None
 
         t0 = time.perf_counter()
 
@@ -105,11 +103,10 @@ class WebSearchTool(BaseTool):
                         f"[WebSearch] Extracted {len(chunks)} chunks from Tavily raw_content"
                     )
                     if span:
-                        span.update(output={
+                        span.end(output={
                             "urls": [r["url"] for r in result.get("results", [])],
                             "top_chunks": [{"url": c["url"], "title": c.get("title", ""), "text": c["text"][:500]} for c in chunks],
                         }, metadata={"latency_s": round(time.perf_counter() - t0, 3), "source": "tavily_raw"})
-                        span.end()
                     return result
 
             # Fall back to manual scraping for DuckDuckGo or when Tavily raw_content is empty
@@ -138,11 +135,10 @@ class WebSearchTool(BaseTool):
 
         if span:
             chunks = result.get("scraped_chunks", [])
-            span.update(output={
+            span.end(output={
                 "urls": [r["url"] for r in result.get("results", [])],
                 "top_chunks": [{"url": c["url"], "title": c.get("title", ""), "text": c["text"][:500]} for c in chunks],
             }, metadata={"latency_s": round(time.perf_counter() - t0, 3), "source": "scraped"})
-            span.end()
 
         return result
 

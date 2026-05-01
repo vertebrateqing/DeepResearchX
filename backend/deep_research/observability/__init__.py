@@ -1,37 +1,33 @@
 from __future__ import annotations
-"""Langfuse v4 observability helpers.
+"""Langfuse v2 observability helpers.
 
-v4 API:
-  - lf.start_observation(trace_context=TraceContext(trace_id=...), name=..., as_type=..., input=...)
-    → returns LangfuseSpan / LangfuseGeneration (call .update(...) then .end())
-  - lf.create_dataset_item(dataset_name=..., input=..., expected_output=..., source_trace_id=...)
+v2 API (langfuse>=2.0.0,<3.0.0):
+  - lf.trace(id=trace_id, name=..., input=..., session_id=...) → StatefulTraceClient
+  - trace.span(name=..., input=...) → StatefulSpanClient  (call .end(output=...) to close)
+  - trace.generation(name=..., model=..., input=...) → StatefulGenerationClient
   - lf.flush()
-  - lf.create_trace_id() → str  (pre-allocate a trace id)
+  - lf.create_dataset(name=...) / lf.create_dataset_item(...)
 
 Usage:
-    from deep_research.observability import get_langfuse, make_trace_context
+    from deep_research.observability import get_langfuse
 
     lf = get_langfuse()
     if lf:
-        tc = make_trace_context(trace_id)
-        span = lf.start_observation(trace_context=tc, name="web_search",
-                                    as_type="retriever", input={...})
-        # ... do work ...
-        span.update(output={...}, metadata={...})
-        span.end()
+        trace = lf.trace(id=trace_id, name="deepresearch", input={"query": q})
+        gen = trace.generation(name="llm_call", model="...", input=messages)
+        gen.end(output=content, usage={"input": n, "output": m})
 """
 
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from langfuse import Langfuse
-    from langfuse.types import TraceContext
 
 _client: "Langfuse | None" = None
 
 
 def get_langfuse() -> "Langfuse | None":
-    """Return the shared Langfuse client, or None if disabled/not installed."""
+    """Return the shared Langfuse v2 client, or None if disabled/not installed."""
     global _client
     try:
         from deep_research.config.settings import get_settings
@@ -58,12 +54,6 @@ def get_langfuse() -> "Langfuse | None":
     return _client
 
 
-def make_trace_context(trace_id: Optional[str]) -> "TraceContext | None":
-    """Build a TraceContext dict for start_observation(..., trace_context=...)."""
-    if not trace_id:
-        return None
-    try:
-        from langfuse.types import TraceContext
-        return TraceContext(trace_id=trace_id)
-    except Exception:
-        return None
+def make_trace_context(trace_id: Optional[str]) -> Optional[str]:
+    """Return trace_id as-is (used for v2 API compatibility shim)."""
+    return trace_id

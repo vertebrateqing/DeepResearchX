@@ -138,7 +138,7 @@ logging:
 # Langfuse 可观测性配置（默认关闭）
 # 启用方式：设置 LANGFUSE_ENABLED=true，并配置 key/host
 langfuse:
-  enabled: false
+  enabled: ${LANGFUSE_ENABLED:-false}
   public_key: ${LANGFUSE_PUBLIC_KEY:-}
   secret_key: ${LANGFUSE_SECRET_KEY:-}
   host: ${LANGFUSE_HOST:-http://localhost:3000}

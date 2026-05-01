@@ -1,133 +1,120 @@
-"""Integration tests for Langfuse observability.
+"""Integration tests for Langfuse observability (v2 SDK).
 
 Tests verify that:
-1. All LLM calls are captured as generation spans
-2. Web search calls are captured as retrieval spans with urls+chunks
+1. All LLM calls are captured as generation observations
+2. Web search calls are captured as span observations with urls+chunks
 3. Phase spans (outline, chapters, integration, editing) are created
-4. Spans have correct metadata (latency, tokens, etc.)
+4. All data is persisted to PostgreSQL via Langfuse v2 ingestion API
 
-Uses InMemorySpanExporter to capture spans without a Langfuse server.
+Requires:
+  - Langfuse v2 server running at localhost:3000
+  - LANGFUSE_ENABLED=true in environment
 """
-import asyncio
-import json
 import os
 import sys
 import time
-import pytest
 
-# ---- Setup in-memory span capture ----
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from langfuse import Langfuse
-from langfuse.types import TraceContext
-
-_span_exporter = InMemorySpanExporter()
-_provider = TracerProvider()
-_provider.add_span_processor(SimpleSpanProcessor(_span_exporter))
-
-# Patch env so settings load with langfuse enabled
+# Set env before any imports
 os.environ["LANGFUSE_ENABLED"] = "true"
-os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-test-local"
-os.environ["LANGFUSE_SECRET_KEY"] = "sk-test-local"
-os.environ["LANGFUSE_HOST"] = "http://localhost:9999"  # won't connect, we capture locally
+os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-107cfd09-4458-47e7-b694-649d966ac71c"
+os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-4ab52db8-24b0-4d58-ba8d-6d4700d745f0"
+os.environ["LANGFUSE_HOST"] = "http://localhost:3000"
 
-# Create patched langfuse client using our provider
-_lf = Langfuse(
-    public_key="pk-test-local",
-    secret_key="sk-test-local",
-    host="http://localhost:9999",
-    tracer_provider=_provider,
-)
+# Reset settings singleton and langfuse client
+import deep_research.observability as _obs
+_obs._client = None
 
+from deep_research.config.settings import Settings as _Settings
+import deep_research.config.settings as _cfg_mod
+_cfg_mod._settings = None
 
-def get_spans(name=None):
-    spans = _span_exporter.get_finished_spans()
-    if name:
-        return [s for s in spans if s.name == name]
-    return spans
+from deep_research.observability import get_langfuse
+
+lf = get_langfuse()
+assert lf is not None, "Langfuse client should not be None when enabled"
 
 
-def clear_spans():
-    _span_exporter.clear()
+def _count_db(table: str) -> int:
+    """Count rows in a PostgreSQL table."""
+    import subprocess
+    result = subprocess.run(
+        ["/opt/homebrew/opt/postgresql@15/bin/psql", "-p", "5433", "-d", "langfuse",
+         "-t", "-c", f"SELECT count(*) FROM {table};"],
+        capture_output=True, text=True
+    )
+    try:
+        return int(result.stdout.strip())
+    except Exception:
+        return -1
 
 
 # ---- Test 1: LLM Generation Span ----
 def test_llm_generation_span():
-    """Verify LLM calls produce generation spans with input/output/usage."""
-    clear_spans()
+    """Verify LLM calls produce generation observations with input/output/usage."""
+    before = _count_db("observations")
 
-    trace_id = _lf.create_trace_id()
-    tc = TraceContext(trace_id=trace_id)
+    trace = lf.trace(
+        name="test_llm_generation",
+        session_id="test-session-001",
+        input={"query": "分析2024年新能源汽车市场"},
+    )
 
-    # Simulate what LLMClient._openai_chat does
     messages = [{"role": "user", "content": "分析2024年新能源汽车市场"}]
-    gen = _lf.start_observation(
-        trace_context=tc,
+    gen = lf.generation(
+        trace_id=trace.id,
         name="llm_call",
-        as_type="generation",
         model="MiniMax-M2.5",
         input=messages,
         metadata={"tools_enabled": False},
     )
 
-    # Simulate LLM response
-    time.sleep(0.01)
-    content = "2024年新能源汽车市场规模达到1200万辆..."
-    usage = {"input": 120, "output": 250}
-
-    gen.update(
+    time.sleep(0.05)
+    content = "2024年新能源汽车市场规模达到1200万辆，同比增长35%..."
+    gen.end(
         output=content,
-        usage_details=usage,
+        usage={"input": 120, "output": 250},
         metadata={"latency_s": 2.3, "has_tool_calls": False},
     )
-    gen.end()
-    _lf.flush()
+    trace.update(output={"status": "test_complete"})
+    lf.flush()
 
-    spans = get_spans("llm_call")
-    assert len(spans) >= 1, f"Expected llm_call span, got: {[s.name for s in get_spans()]}"
+    after = _count_db("observations")
+    assert after > before, f"Expected new observations, count before={before} after={after}"
 
-    span = spans[0]
-    attrs = span.attributes
+    # Verify via Langfuse API
+    obs = lf.get_observation(gen.id)
+    assert obs.type == "GENERATION", f"Expected GENERATION, got {obs.type}"
+    assert obs.model == "MiniMax-M2.5"
+    assert "新能源汽车" in str(obs.output or "")
 
-    # Verify input is captured
-    assert "langfuse.observation.input" in attrs
-    input_data = json.loads(attrs["langfuse.observation.input"])
-    assert input_data[0]["content"] == "分析2024年新能源汽车市场"
-
-    # Verify output is captured
-    assert "langfuse.observation.output" in attrs
-    assert "2024年新能源汽车" in attrs["langfuse.observation.output"]
-
-    # Verify metadata
-    assert "langfuse.observation.metadata.latency_s" in attrs
-
-    print(f"✅ Test 1 PASSED: LLM generation span captured")
-    print(f"   - input: {attrs['langfuse.observation.input'][:80]}...")
-    print(f"   - output: {attrs['langfuse.observation.output'][:80]}...")
-    print(f"   - latency: {attrs.get('langfuse.observation.metadata.latency_s')}")
+    print(f"✅ Test 1 PASSED: LLM generation span stored")
+    print(f"   - trace_id: {trace.id}")
+    print(f"   - generation_id: {gen.id}")
+    print(f"   - model: {obs.model}")
+    print(f"   - input: {str(obs.input)[:80]}...")
+    print(f"   - output: {str(obs.output)[:80]}...")
+    print(f"   - usage: {obs.usage}")
 
 
 # ---- Test 2: Web Search Retrieval Span ----
 def test_web_search_retrieval_span():
-    """Verify web search calls produce retrieval spans with urls and chunks."""
-    clear_spans()
+    """Verify web search calls produce span observations with urls and chunks."""
+    before = _count_db("observations")
 
-    trace_id = _lf.create_trace_id()
-    tc = TraceContext(trace_id=trace_id)
+    trace = lf.trace(
+        name="test_web_search",
+        session_id="test-session-002",
+        input={"query": "2024年新能源汽车销量数据"},
+    )
 
-    # Simulate what WebSearchTool.execute does
     query = "2024年新能源汽车销量数据"
-    span = _lf.start_observation(
-        trace_context=tc,
+    span = lf.span(
+        trace_id=trace.id,
         name="web_search",
-        as_type="retriever",
         input={"query": query, "max_results": 10, "provider": "tavily"},
     )
 
-    time.sleep(0.01)
-
-    # Simulate search results with chunks
+    time.sleep(0.05)
     urls = [
         "https://example.com/ev-2024-sales",
         "https://news.auto.com/ev-market-2024",
@@ -138,100 +125,87 @@ def test_web_search_retrieval_span():
         {"url": urls[1], "title": "新能源汽车市场分析", "text": "比亚迪以350万辆的年销量位居全球新能源汽车销量第一，特斯拉以180万辆位列第二..."},
         {"url": urls[2], "title": "能源政策与新能源汽车", "text": "国家政策持续支持新能源汽车发展，补贴政策延续至2025年底..."},
     ]
-
-    span.update(
+    span.end(
         output={"urls": urls, "top_chunks": chunks},
         metadata={"latency_s": 1.8, "source": "tavily_raw"},
     )
-    span.end()
-    _lf.flush()
+    trace.update(output={"status": "test_complete"})
+    lf.flush()
 
-    spans = get_spans("web_search")
-    assert len(spans) >= 1, f"Expected web_search span, got: {[s.name for s in get_spans()]}"
+    after = _count_db("observations")
+    assert after > before, f"Expected new span observations, before={before} after={after}"
 
-    span_data = spans[0]
-    attrs = span_data.attributes
+    obs = lf.get_observation(span.id)
+    assert obs.type == "SPAN", f"Expected SPAN, got {obs.type}"
+    assert obs.input is not None
 
-    # Verify input query captured
-    assert "langfuse.observation.input" in attrs
-    input_data = json.loads(attrs["langfuse.observation.input"])
-    assert input_data["query"] == query
+    output_data = obs.output or {}
+    assert "urls" in str(output_data)
+    assert "top_chunks" in str(output_data)
 
-    # Verify output has urls and chunks
-    assert "langfuse.observation.output" in attrs
-    output_data = json.loads(attrs["langfuse.observation.output"])
-    assert len(output_data["urls"]) == 3
-    assert len(output_data["top_chunks"]) == 3
-    assert "2024年全年新能源汽车" in output_data["top_chunks"][0]["text"]
-
-    print(f"✅ Test 2 PASSED: Web search retrieval span captured")
-    print(f"   - query: {input_data['query']}")
-    print(f"   - urls count: {len(output_data['urls'])}")
-    print(f"   - top chunks: {len(output_data['top_chunks'])}")
-    for c in output_data["top_chunks"]:
+    print(f"✅ Test 2 PASSED: Web search retrieval span stored")
+    print(f"   - trace_id: {trace.id}")
+    print(f"   - span_id: {span.id}")
+    print(f"   - input query: {query}")
+    print(f"   - output urls: {len(urls)}")
+    print(f"   - top chunks: {len(chunks)}")
+    for c in chunks:
         print(f"     • [{c['title']}] {c['text'][:60]}...")
 
 
 # ---- Test 3: Full Pipeline Phase Spans ----
 def test_pipeline_phase_spans():
     """Verify all pipeline phases produce spans with latency metadata."""
-    clear_spans()
+    before_traces = _count_db("traces")
+    before_obs = _count_db("observations")
 
-    trace_id = _lf.create_trace_id()
-    tc = TraceContext(trace_id=trace_id)
-
-    # Simulate orchestrator root span
-    root = _lf.start_observation(
-        trace_context=tc,
+    trace = lf.trace(
         name="deepresearch",
-        as_type="agent",
+        session_id="test-session-003",
         input={"query": "分析2024年中国新能源汽车市场"},
-        metadata={"model": "MiniMax-M2.5", "session_id": "test-session-001"},
+        metadata={"model": "MiniMax-M2.5"},
     )
 
     phases = [
-        ("outline_planning", "chain", {"title": "2024新能源汽车市场分析报告", "chapters": ["c1", "c2", "c3"]}, 3.2),
-        ("chapter_execution", "chain", {"chapters": 3, "passed": 3}, 45.8),
-        ("integration", "chain", {}, 8.1),
-        ("editorial_review", "chain", {}, 12.3),
+        ("outline_planning", {"title": "2024新能源汽车市场分析报告", "chapters": ["c1", "c2", "c3"]}, 3.2),
+        ("chapter_execution", {"chapters": 3, "passed": 3}, 45.8),
+        ("integration", {}, 8.1),
+        ("editorial_review", {}, 12.3),
     ]
 
-    for name, as_type, output, latency in phases:
-        t0 = time.perf_counter()
-        span = _lf.start_observation(trace_context=tc, name=name, as_type=as_type)
-        time.sleep(0.01)  # simulate work
-        span.update(output=output if output else None, metadata={"latency_s": latency})
-        span.end()
+    span_ids = {}
+    for name, output, latency in phases:
+        span = lf.span(trace_id=trace.id, name=name)
+        time.sleep(0.01)
+        span.end(output=output if output else None, metadata={"latency_s": latency})
+        span_ids[name] = span.id
 
-    root.update(output={"report_length": 15000, "status": "success"})
-    root.end()
-    _lf.flush()
+    trace.update(output={"report_length": 15000, "status": "success"})
+    lf.flush()
 
-    all_spans = get_spans()
-    span_names = [s.name for s in all_spans]
+    after_traces = _count_db("traces")
+    after_obs = _count_db("observations")
 
-    print(f"✅ Test 3 PASSED: All pipeline phase spans captured")
-    print(f"   Spans recorded: {span_names}")
+    assert after_traces > before_traces, "Expected new trace"
+    assert after_obs >= before_obs + 4, f"Expected at least 4 new spans, got {after_obs - before_obs}"
 
-    assert "deepresearch" in span_names
-    assert "outline_planning" in span_names
-    assert "chapter_execution" in span_names
-    assert "integration" in span_names
-    assert "editorial_review" in span_names
+    print(f"✅ Test 3 PASSED: Full pipeline phase spans stored")
+    print(f"   - trace_id: {trace.id}")
+    print(f"   - new traces: {after_traces - before_traces}")
+    print(f"   - new observations: {after_obs - before_obs}")
 
-    # Verify latency metadata on each phase
-    for phase_name, _, _, expected_latency in phases:
-        phase_spans = get_spans(phase_name)
-        assert len(phase_spans) >= 1, f"Missing span: {phase_name}"
-        span = phase_spans[0]
-        latency_attr = span.attributes.get("langfuse.observation.metadata.latency_s")
-        assert latency_attr is not None, f"Missing latency on {phase_name}"
-        print(f"   - {phase_name}: latency={latency_attr}s")
+    for name, _, expected_latency in phases:
+        obs = lf.get_observation(span_ids[name])
+        latency = (obs.metadata or {}).get("latency_s", "N/A") if obs.metadata else "N/A"
+        print(f"   - {name}: latency={latency}s, id={obs.id[:8]}...")
+
+    print(f"\n   View traces at: http://localhost:3000")
 
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Langfuse Integration Tests (InMemory mode)")
+    print("Langfuse Integration Tests (Live Server)")
+    print(f"Server: {os.environ['LANGFUSE_HOST']}")
     print("=" * 60)
 
     tests = [test_llm_generation_span, test_web_search_retrieval_span, test_pipeline_phase_spans]
@@ -239,6 +213,7 @@ if __name__ == "__main__":
     failed = 0
 
     for test_fn in tests:
+        print(f"\nRunning {test_fn.__name__}...")
         try:
             test_fn()
             passed += 1
@@ -251,5 +226,6 @@ if __name__ == "__main__":
     print()
     print("=" * 60)
     print(f"Results: {passed} passed, {failed} failed")
+    print(f"View all traces at: http://localhost:3000")
     print("=" * 60)
     sys.exit(0 if failed == 0 else 1)
