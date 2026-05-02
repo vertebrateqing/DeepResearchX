@@ -261,6 +261,9 @@ class OutlinePlanner:
         """Parse LLM response into ReportOutline."""
         import re
 
+        # Step 0: Strip <think>...</think> reasoning block (chain-of-thought models)
+        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+
         # Step 1: Extract from markdown code block
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0]

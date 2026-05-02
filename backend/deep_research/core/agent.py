@@ -196,9 +196,15 @@ class LLMClient:
         reasoning = message.get("reasoning_content", "")
         if reasoning and not message.get("content", "").startswith("[思考]"):
             content = message.get("content", "")
-            # Prepend reasoning for downstream consumption
             if reasoning.strip():
                 message["content"] = f"[思考过程]\n{reasoning}\n\n[最终回答]\n{content}"
+            choices[0]["message"] = message
+
+        # Strip <think>...</think> blocks emitted by chain-of-thought models (e.g. MiniMax)
+        import re as _re
+        raw_content = message.get("content", "")
+        if raw_content and "<think>" in raw_content:
+            message["content"] = _re.sub(r"<think>.*?</think>", "", raw_content, flags=_re.DOTALL).strip()
             choices[0]["message"] = message
 
         # Some providers (e.g., older Qwen) wrap tool_calls in different keys
