@@ -283,6 +283,79 @@ Swagger UI available at `http://localhost:8000/docs`.
 
 ---
 
+## Observability (Langfuse)
+
+DeepResearchX integrates [Langfuse](https://langfuse.com) for full observability: every LLM call, web search, pipeline phase, and tool invocation is traced.
+
+### What is tracked
+
+| Span type | Name | Content |
+|-----------|------|---------|
+| `agent` | `deepresearch` | Root trace — full request input/output |
+| `generation` | `llm_call` | Full prompt messages, response text, token counts, latency |
+| `span` | `outline_planning` | Enriched query in, chapter list out, latency |
+| `span` | `chapter_execution` | Chapter count, pass rate, latency |
+| `span` | `web_search` | Query, provider, retrieved URLs, top-k chunks with text |
+| `span` | `integration` | Latency |
+| `span` | `editorial_review` | Latency |
+
+### Self-hosted Langfuse server
+
+Start a local Langfuse v2 server (PostgreSQL required):
+
+```bash
+# Start PostgreSQL (one-time)
+/opt/homebrew/opt/postgresql@15/bin/pg_ctl -D ~/.langfuse-postgres start
+
+# Run DB migrations (one-time)
+cd ~/.langfuse-server/web
+DATABASE_URL="postgresql://$(whoami)@localhost:5433/langfuse" \
+  node node_modules/.bin/prisma migrate deploy
+
+# Start Langfuse server
+DATABASE_URL="postgresql://$(whoami)@localhost:5433/langfuse" \
+NEXTAUTH_SECRET="your-secret" SALT="your-salt" \
+NEXTAUTH_URL="http://localhost:3000" \
+  node node_modules/.bin/next dev -p 3000
+```
+
+Then register at `http://localhost:3000` and create a project to obtain `public_key` / `secret_key`.
+
+Add to `backend/.env`:
+
+```bash
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=http://localhost:3000
+```
+
+### Startup modes
+
+```bash
+# Normal mode — no tracing (default)
+./dev-start.sh
+
+# Production tracing — all LLM calls and spans recorded, no dataset
+./dev-start.sh --trace
+
+# Dataset recording — tracing + write to Langfuse Dataset (default 10 items max)
+./dev-start.sh --record
+./dev-start.sh --record 50   # custom cap
+```
+
+All tracing config is deployment-level, controlled via environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LANGFUSE_ENABLED` | Enable tracing | `false` |
+| `LANGFUSE_PUBLIC_KEY` | Project public key | — |
+| `LANGFUSE_SECRET_KEY` | Project secret key | — |
+| `LANGFUSE_HOST` | Langfuse server URL | `http://localhost:3000` |
+| `LANGFUSE_RECORD_DATASET` | Write completed runs to Dataset | `false` |
+| `LANGFUSE_DATASET_MAX_ITEMS` | Max dataset items per run | `1` |
+
+---
+
 ## Evaluation
 
 DeepResearchX includes a benchmark evaluation pipeline using RACE metrics.
@@ -587,6 +660,79 @@ docker-compose up --build
 | `error` | 错误信息 |
 
 Swagger UI：`http://localhost:8000/docs`
+
+---
+
+## 可观测性（Langfuse）
+
+DeepResearchX 集成了 [Langfuse](https://langfuse.com) 完整可观测性：每次 LLM 调用、网络搜索、流水线阶段和工具调用都会被追踪。
+
+### 追踪内容
+
+| Span 类型 | 名称 | 内容 |
+|-----------|------|------|
+| `agent` | `deepresearch` | 根 trace — 完整请求输入/输出 |
+| `generation` | `llm_call` | 完整 prompt 消息、回答文本、token 数、耗时 |
+| `span` | `outline_planning` | 增强查询输入、章节列表输出、耗时 |
+| `span` | `chapter_execution` | 章节数、通过率、耗时 |
+| `span` | `web_search` | 查询词、提供商、检索 URL 列表、top-k chunk 文本 |
+| `span` | `integration` | 耗时 |
+| `span` | `editorial_review` | 耗时 |
+
+### 本地部署 Langfuse 服务
+
+启动本地 Langfuse v2 服务（需要 PostgreSQL）：
+
+```bash
+# 启动 PostgreSQL（首次）
+/opt/homebrew/opt/postgresql@15/bin/pg_ctl -D ~/.langfuse-postgres start
+
+# 执行数据库迁移（首次）
+cd ~/.langfuse-server/web
+DATABASE_URL="postgresql://$(whoami)@localhost:5433/langfuse" \
+  node node_modules/.bin/prisma migrate deploy
+
+# 启动 Langfuse 服务
+DATABASE_URL="postgresql://$(whoami)@localhost:5433/langfuse" \
+NEXTAUTH_SECRET="your-secret" SALT="your-salt" \
+NEXTAUTH_URL="http://localhost:3000" \
+  node node_modules/.bin/next dev -p 3000
+```
+
+访问 `http://localhost:3000` 注册账号并创建项目，获取 `public_key` / `secret_key`。
+
+在 `backend/.env` 中添加：
+
+```bash
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=http://localhost:3000
+```
+
+### 启动模式
+
+```bash
+# 普通模式 — 不启用追踪（默认）
+./dev-start.sh
+
+# 生产追踪模式 — 追踪所有 LLM 调用和阶段，不录制 dataset
+./dev-start.sh --trace
+
+# 录制测试集模式 — 追踪 + 写入 Langfuse Dataset（默认最多 10 条）
+./dev-start.sh --record
+./dev-start.sh --record 50   # 自定义上限
+```
+
+所有追踪配置均为部署层面配置，通过环境变量控制：
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `LANGFUSE_ENABLED` | 是否启用追踪 | `false` |
+| `LANGFUSE_PUBLIC_KEY` | 项目公钥 | — |
+| `LANGFUSE_SECRET_KEY` | 项目私钥 | — |
+| `LANGFUSE_HOST` | Langfuse 服务地址 | `http://localhost:3000` |
+| `LANGFUSE_RECORD_DATASET` | 是否将研究结果录入 Dataset | `false` |
+| `LANGFUSE_DATASET_MAX_ITEMS` | 每次运行最多录入条目数 | `1` |
 
 ---
 
