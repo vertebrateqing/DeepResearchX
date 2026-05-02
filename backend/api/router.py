@@ -54,9 +54,6 @@ async def stream_analysis(
     session_id: Optional[str] = Query(None, description="可选，已有会话 ID"),
     skip_clarification: bool = Query(False, description="跳过意图澄清（评测模式）"),
     confirmed_query: Optional[str] = Query(None, description="用户确认后的最终 prompt，直接用于研究"),
-    enable_tracing: Optional[bool] = Query(None, description="是否启用 Langfuse 追踪（None 表示沿用配置文件默认值）"),
-    record_dataset: bool = Query(False, description="本次请求是否录制到 Langfuse Dataset"),
-    dataset_max_items: int = Query(1, description="本次录制最多写入 Dataset 的条目数"),
 ):
     """
     SSE 流式分析端点。
@@ -73,9 +70,7 @@ async def stream_analysis(
         StreamingResponse — SSE 格式的事件流
     """
     return StreamingResponse(
-        analyze_stream(query, model, session_id, skip_clarification, confirmed_query,
-                       enable_tracing=enable_tracing, record_dataset=record_dataset,
-                       dataset_max_items=dataset_max_items),
+        analyze_stream(query, model, session_id, skip_clarification, confirmed_query),
         media_type="text/event-stream",
         headers={
             # 禁用缓存，确保每个事件都能实时到达前端

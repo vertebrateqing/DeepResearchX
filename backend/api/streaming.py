@@ -35,9 +35,6 @@ async def analyze_stream(
     session_id: Optional[str] = None,
     skip_clarification: bool = False,
     confirmed_query: Optional[str] = None,
-    enable_tracing: Optional[bool] = None,
-    record_dataset: bool = False,
-    dataset_max_items: int = 1,
 ) -> AsyncGenerator[str, None]:
     """
     执行分析并以 SSE 格式流式返回结果。
@@ -88,9 +85,6 @@ async def analyze_stream(
             session_id=session_id,
             progress_callback=on_progress,
             skip_clarification=skip_clarification,
-            enable_tracing=enable_tracing,
-            record_dataset=record_dataset,
-            dataset_max_items=dataset_max_items,
         )
 
         # 如果前端传入了用户确认的最终 prompt，直接用它研究，跳过澄清流程

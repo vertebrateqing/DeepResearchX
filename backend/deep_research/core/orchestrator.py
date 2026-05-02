@@ -66,9 +66,6 @@ class OrchestratorAgent(BaseAgent):
         user_id: str = "anonymous",
         progress_callback: Optional[Callable[..., None]] = None,
         skip_clarification: bool = False,
-        enable_tracing: Optional[bool] = None,
-        record_dataset: bool = False,
-        dataset_max_items: int = 1,
     ):
         cfg = get_settings().agents.orchestrator
         super().__init__(
@@ -85,10 +82,9 @@ class OrchestratorAgent(BaseAgent):
         )
         self.progress_callback = progress_callback
         self.skip_clarification = skip_clarification
-        # enable_tracing=None 沿用 settings.langfuse.enabled；True/False 覆盖
-        self._enable_tracing = enable_tracing
-        self._record_dataset = record_dataset
-        self._dataset_max_items = max(1, dataset_max_items)
+        _lf_cfg = get_settings().langfuse
+        self._record_dataset = _lf_cfg.record_dataset
+        self._dataset_max_items = max(1, _lf_cfg.dataset_max_items)
 
         # V4 components
         self.intent_clarifier = IntentClarifier()
@@ -153,12 +149,8 @@ class OrchestratorAgent(BaseAgent):
         """
         logger.info(f"Orchestrator received request: {user_input[:100]}...")
 
-        # Create Langfuse trace — enable_tracing param overrides settings.langfuse.enabled
+        # Create Langfuse trace for this request
         lf = get_langfuse()
-        if self._enable_tracing is False:
-            lf = None  # explicitly disabled for this request
-        elif self._enable_tracing is True and lf is None:
-            logger.warning("[Orchestrator] enable_tracing=True but Langfuse not configured")
         if lf:
             self._lf_trace = lf.trace(
                 name="deepresearch",
@@ -400,7 +392,6 @@ class OrchestratorAgent(BaseAgent):
                         items_written += 1
                         logger.info(f"[Orchestrator] Langfuse dataset item recorded ({items_written}/{self._dataset_max_items})")
 
-                lf.flush()
             except Exception as _lf_err:
                 logger.warning(f"[Orchestrator] Langfuse finalize failed: {_lf_err}")
 

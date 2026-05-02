@@ -145,3 +145,5 @@ langfuse:
   dataset_name: deepresearchx-production
   flush_at: 15
   flush_interval: 0.5
+  record_dataset: ${LANGFUSE_RECORD_DATASET:-false}
+  dataset_max_items: ${LANGFUSE_DATASET_MAX_ITEMS:-1}

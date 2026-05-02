@@ -127,6 +127,8 @@ class LangfuseConfig(BaseSettings):
     dataset_name: str = "deepresearchx-production"
     flush_at: int = 15
     flush_interval: float = 0.5
+    record_dataset: bool = False
+    dataset_max_items: int = 1
 
     model_config = SettingsConfigDict(env_prefix="LANGFUSE_")
 
