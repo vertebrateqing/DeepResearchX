@@ -66,6 +66,9 @@ class OrchestratorAgent(BaseAgent):
         user_id: str = "anonymous",
         progress_callback: Optional[Callable[..., None]] = None,
         skip_clarification: bool = False,
+        enable_tracing: Optional[bool] = None,
+        record_dataset: bool = False,
+        dataset_max_items: int = 1,
     ):
         cfg = get_settings().agents.orchestrator
         super().__init__(
@@ -82,6 +85,10 @@ class OrchestratorAgent(BaseAgent):
         )
         self.progress_callback = progress_callback
         self.skip_clarification = skip_clarification
+        # enable_tracing=None 沿用 settings.langfuse.enabled；True/False 覆盖
+        self._enable_tracing = enable_tracing
+        self._record_dataset = record_dataset
+        self._dataset_max_items = max(1, dataset_max_items)
 
         # V4 components
         self.intent_clarifier = IntentClarifier()
@@ -146,8 +153,12 @@ class OrchestratorAgent(BaseAgent):
         """
         logger.info(f"Orchestrator received request: {user_input[:100]}...")
 
-        # Create Langfuse trace for this request
+        # Create Langfuse trace — enable_tracing param overrides settings.langfuse.enabled
         lf = get_langfuse()
+        if self._enable_tracing is False:
+            lf = None  # explicitly disabled for this request
+        elif self._enable_tracing is True and lf is None:
+            logger.warning("[Orchestrator] enable_tracing=True but Langfuse not configured")
         if lf:
             self._lf_trace = lf.trace(
                 name="deepresearch",
@@ -365,27 +376,33 @@ class OrchestratorAgent(BaseAgent):
         self.memory.add_assistant_message(final_text[:500])
         await self.memory.save()
 
-        # Write to Langfuse dataset and finalize trace
+        # Finalize Langfuse trace and optionally record to dataset
         if lf and trace_id:
             try:
-                cfg = get_settings().langfuse
-                # Create dataset (idempotent)
-                try:
-                    lf.create_dataset(name=cfg.dataset_name)
-                except Exception:
-                    pass
-                lf.create_dataset_item(
-                    dataset_name=cfg.dataset_name,
-                    input={"query": original_query, "enriched_query": merged_query},
-                    expected_output=final_text,
-                    metadata={"session_id": self.memory.session_id, "trace_id": trace_id},
-                )
-                # Finalize trace
                 if self._lf_trace:
                     self._lf_trace.update(output={"report_length": len(final_text), "status": "success"})
+
+                if self._record_dataset:
+                    cfg = get_settings().langfuse
+                    try:
+                        lf.create_dataset(name=cfg.dataset_name)
+                    except Exception:
+                        pass
+                    items_written = 0
+                    if items_written < self._dataset_max_items:
+                        lf.create_dataset_item(
+                            dataset_name=cfg.dataset_name,
+                            input={"query": original_query, "enriched_query": merged_query},
+                            expected_output=final_text,
+                            source_trace_id=trace_id,
+                            metadata={"session_id": self.memory.session_id},
+                        )
+                        items_written += 1
+                        logger.info(f"[Orchestrator] Langfuse dataset item recorded ({items_written}/{self._dataset_max_items})")
+
                 lf.flush()
             except Exception as _lf_err:
-                logger.warning(f"[Orchestrator] Langfuse dataset write failed: {_lf_err}")
+                logger.warning(f"[Orchestrator] Langfuse finalize failed: {_lf_err}")
 
         metadata: dict[str, Any] = {}
         if md_path:
