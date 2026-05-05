@@ -38,6 +38,12 @@ ENV/
 .env.local
 .env.*.local
 
+# Planning directory
+.planning/
+
+# Benchmark submodule
+deep_research_bench/
+
 # Data directories
 backend/deep_research/data/raw/*
 backend/deep_research/data/processed/*
