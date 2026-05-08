@@ -5,18 +5,18 @@ import pytest
 from deep_research.core.registry import reset_registry
 
 
-class TestAKShareTool:
+class TestLLMCallTool:
     def setup_method(self):
         reset_registry()
 
     @pytest.mark.asyncio
     async def test_tool_schema(self):
-        from deep_research.tools.akshare_data import AKShareTool
+        from deep_research.tools.llm_call import LLMCallTool
 
-        tool = AKShareTool()
+        tool = LLMCallTool()
         schema = tool.get_schema()
-        assert schema["function"]["name"] == "data_fetch"
-        assert "data_type" in schema["function"]["parameters"]["properties"]
+        assert schema["function"]["name"] == "llm_call"
+        assert "prompt" in schema["function"]["parameters"]["properties"]
 
 
 class TestWebSearchTool:

@@ -4,7 +4,6 @@ Tests verify that:
 1. All LLM calls are captured as generation observations
 2. Web search calls are captured as span observations with urls+chunks
 3. Phase spans (outline, chapters, integration, editing) are created
-4. All data is persisted to PostgreSQL via Langfuse v2 ingestion API
 
 Requires:
   - Langfuse v2 server running at localhost:3000
@@ -14,6 +13,8 @@ import os
 import sys
 import time
 
+import pytest
+
 # Set env before any imports
 os.environ["LANGFUSE_ENABLED"] = "true"
 os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-107cfd09-4458-47e7-b694-649d966ac71c"
@@ -22,35 +23,84 @@ os.environ["LANGFUSE_HOST"] = "http://localhost:3000"
 
 # Reset settings singleton and langfuse client
 import deep_research.observability as _obs
+
 _obs._client = None
 
 from deep_research.config.settings import Settings as _Settings
 import deep_research.config.settings as _cfg_mod
+
 _cfg_mod._settings = None
 
 from deep_research.observability import get_langfuse
 
+
 lf = get_langfuse()
-assert lf is not None, "Langfuse client should not be None when enabled"
+
+
+# Check if Langfuse server is reachable
+_server_available = False
+if lf is not None:
+    try:
+        # Quick health check via Langfuse API
+        import urllib.request
+        req = urllib.request.Request(
+            f"{os.environ['LANGFUSE_HOST']}/api/public/health",
+            method="GET",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            _server_available = resp.status == 200
+    except Exception:
+        _server_available = False
+
+
+pytestmark = pytest.mark.skipif(
+    not _server_available,
+    reason="Langfuse server not running at localhost:3000. Start it with: cd ~/langfuse-server && pnpm run dev",
+)
 
 
 def _count_db(table: str) -> int:
-    """Count rows in a PostgreSQL table."""
-    import subprocess
-    result = subprocess.run(
-        ["/opt/homebrew/opt/postgresql@15/bin/psql", "-p", "5433", "-d", "langfuse",
-         "-t", "-c", f"SELECT count(*) FROM {table};"],
-        capture_output=True, text=True
-    )
+    """Count rows in the PostgreSQL database used by Langfuse."""
+    # Try pgserver first (cross-platform embedded PostgreSQL)
+    pgdata = os.path.expanduser("~/.langfuse-postgres-pgserver")
     try:
-        return int(result.stdout.strip())
-    except Exception:
+        import pgserver
+        import pathlib
+        s = pgserver.get_server(pathlib.Path(pgdata), cleanup_mode=None)
+        s.ensure_postgres_running()
+        result = s.psql(f"SELECT count(*) FROM {table};")
+        # Parse result like "?column? \n----------\n        42\n(1 row)"
+        for line in result.splitlines():
+            line = line.strip()
+            if line and line.isdigit():
+                return int(line)
         return -1
+    except Exception:
+        pass
+
+    # Fallback: try system psql on common ports
+    for port in [5433, 5432]:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["psql", "-p", str(port), "-d", "langfuse", "-t", "-c", f"SELECT count(*) FROM {table};"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                return int(result.stdout.strip())
+        except Exception:
+            continue
+
+    return -1
 
 
 # ---- Test 1: LLM Generation Span ----
 def test_llm_generation_span():
     """Verify LLM calls produce generation observations with input/output/usage."""
+    assert lf is not None, "Langfuse client should not be None when enabled"
     before = _count_db("observations")
 
     trace = lf.trace(
@@ -206,7 +256,13 @@ if __name__ == "__main__":
     print("=" * 60)
     print("Langfuse Integration Tests (Live Server)")
     print(f"Server: {os.environ['LANGFUSE_HOST']}")
+    print(f"Server available: {_server_available}")
     print("=" * 60)
+
+    if not _server_available:
+        print("\n⚠️  Langfuse server not running. Skipping tests.")
+        print("   Start server: cd ~/langfuse-server && pnpm run dev")
+        sys.exit(0)
 
     tests = [test_llm_generation_span, test_web_search_retrieval_span, test_pipeline_phase_spans]
     passed = 0

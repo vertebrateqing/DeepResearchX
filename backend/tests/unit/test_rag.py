@@ -29,50 +29,32 @@ class TestTextSplitter:
         assert len(chunks) >= 1
 
 
-class TestDocumentLoader:
-    def test_document_creation(self):
-        from deep_research.rag.document_loader import Document
+class TestVectorStore:
+    def test_vector_store_init(self):
+        from deep_research.rag.vector_store import ChromaVectorStore
 
-        doc = Document(
-            content="test content",
-            metadata={"source": "test"},
-            source="test.txt",
+        store = ChromaVectorStore(
+            collection_name="test_collection",
+            persist_directory="/tmp/test_chroma",
         )
-        assert doc.content == "test content"
-        assert doc.metadata["source"] == "test"
+        assert store.collection_name == "test_collection"
 
-    def test_document_to_dict(self):
-        from deep_research.rag.document_loader import Document
+    def test_vector_store_add_and_search(self):
+        from deep_research.rag.vector_store import ChromaVectorStore
 
-        doc = Document(content="test", metadata={"key": "value"})
-        d = doc.to_dict()
-        assert d["content"] == "test"
-        assert d["metadata"]["key"] == "value"
-
-
-class TestRAGMerge:
-    def test_merge_keeps_best_score(self):
-        from deep_research.rag.pipeline import _merge_retrieval_results
-
-        results = [
-            [{"id": "doc1", "score": 0.9, "content": "a"}, {"id": "doc2", "score": 0.5, "content": "b"}],
-            [{"id": "doc1", "score": 0.7, "content": "a2"}, {"id": "doc3", "score": 0.8, "content": "c"}],
-        ]
-        merged = _merge_retrieval_results(results)
-        assert len(merged) == 3
-        doc1 = next(d for d in merged if d["id"] == "doc1")
-        assert doc1["score"] == 0.9
-        scores = [d["score"] for d in merged]
-        assert scores == sorted(scores, reverse=True)
-
-    def test_merge_empty(self):
-        from deep_research.rag.pipeline import _merge_retrieval_results
-
-        assert _merge_retrieval_results([]) == []
-        assert _merge_retrieval_results([[]]) == []
-
-    def test_merge_missing_id_skipped(self):
-        from deep_research.rag.pipeline import _merge_retrieval_results
-
-        results = [[{"score": 0.5, "content": "no id"}]]
-        assert _merge_retrieval_results(results) == []
+        store = ChromaVectorStore(
+            collection_name="test_search",
+            persist_directory="/tmp/test_chroma_search",
+        )
+        # Ensure collection exists before clearing
+        _ = store.collection
+        store.clear()
+        store.add_documents(
+            documents=["hello world", "foo bar"],
+            embeddings=[[1.0, 0.0], [0.0, 1.0]],
+            metadatas=[{"source": "a"}, {"source": "b"}],
+            ids=["d1", "d2"],
+        )
+        results = store.search(query_embedding=[1.0, 0.0], top_k=2)
+        assert len(results) == 2
+        assert results[0]["id"] == "d1"
