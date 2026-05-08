@@ -16,12 +16,16 @@ from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
+from api.documents import documents_router
 from api.models import AnalyzeRequest, TaskCreatedResponse, TaskStatusResponse
 from api.streaming import analyze_stream, get_task_status
 
 # 创建路由实例
 # api_router 是 FastAPI 路由器的实例，所有 API 端点都注册在它上面
 api_router = APIRouter()
+
+# 文档上传 / RAG 管理子路由
+api_router.include_router(documents_router)
 
 
 @api_router.post("/analyze", response_model=TaskCreatedResponse)
@@ -54,6 +58,10 @@ async def stream_analysis(
     session_id: Optional[str] = Query(None, description="可选，已有会话 ID"),
     skip_clarification: bool = Query(False, description="跳过意图澄清（评测模式）"),
     confirmed_query: Optional[str] = Query(None, description="用户确认后的最终 prompt，直接用于研究"),
+    document_ids: Optional[list[str]] = Query(
+        None,
+        description="可选，限定研究只参考这些已上传文档的 doc_id（多个时重复 query 参数）",
+    ),
 ):
     """
     SSE 流式分析端点。
@@ -65,12 +73,20 @@ async def stream_analysis(
         query: 用户的查询字符串（必填）
         model: 可选的 LLM 模型名称
         confirmed_query: 用户在意图澄清卡片中编辑确认的最终 prompt
+        document_ids: 可选，要在哪些上传文档内做 RAG 研究
 
     返回：
         StreamingResponse — SSE 格式的事件流
     """
     return StreamingResponse(
-        analyze_stream(query, model, session_id, skip_clarification, confirmed_query),
+        analyze_stream(
+            query,
+            model,
+            session_id,
+            skip_clarification,
+            confirmed_query,
+            document_ids,
+        ),
         media_type="text/event-stream",
         headers={
             # 禁用缓存，确保每个事件都能实时到达前端

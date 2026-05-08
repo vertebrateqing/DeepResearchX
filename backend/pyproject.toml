@@ -39,6 +39,8 @@ dependencies = [
     # Document processing
     "PyPDF2>=3.0",
     "pdfplumber>=0.10",
+    "python-docx>=1.1",
+    "python-multipart>=0.0.9",
     # Data
     "akshare>=1.14",
     "pandas>=2.0",
@@ -68,10 +70,10 @@ ingest-reports = "financial_agent.scripts.ingest_reports:main"
 run-evaluation = "financial_agent.scripts.run_evaluation:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["financial_agent"]
+packages = ["deep_research"]
 
 [tool.pytest.ini_options]
-testpaths = ["financial_agent/tests"]
+testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v --tb=short"
 

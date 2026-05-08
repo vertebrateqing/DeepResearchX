@@ -35,6 +35,7 @@ async def analyze_stream(
     session_id: Optional[str] = None,
     skip_clarification: bool = False,
     confirmed_query: Optional[str] = None,
+    document_ids: Optional[list[str]] = None,
 ) -> AsyncGenerator[str, None]:
     """
     执行分析并以 SSE 格式流式返回结果。
@@ -46,6 +47,7 @@ async def analyze_stream(
     参数：
         query: 用户的查询，如 "腾讯最近值得买入吗"
         model: 可选，指定 LLM 模型
+        document_ids: 可选，限定研究只引用这些上传文档
 
     返回：
         AsyncGenerator，每次 yield 一条 SSE 格式的字符串
@@ -85,6 +87,7 @@ async def analyze_stream(
             session_id=session_id,
             progress_callback=on_progress,
             skip_clarification=skip_clarification,
+            document_ids=document_ids or None,
         )
 
         # 如果前端传入了用户确认的最终 prompt，直接用它研究，跳过澄清流程

@@ -5,12 +5,14 @@ import json
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from deep_research.config.settings import get_settings
 from deep_research.memory.models import MemoryFinding, UserPreferences
-from deep_research.rag.embedding import EmbeddingService
 from deep_research.rag.vector_store import ChromaVectorStore
+
+if TYPE_CHECKING:
+    from deep_research.rag.embedding import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +35,17 @@ class LongTermStore:
         self.vector_store = vector_store or ChromaVectorStore(
             collection_name=f"user_memory_{user_id}",
         )
-        self.embedding_service = EmbeddingService()
+        self._embedding_service: EmbeddingService | None = None
         self.prefs_path = DEFAULT_PREFS_PATH.parent / f"{user_id}_preferences.json"
         self.prefs_path.parent.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def embedding_service(self) -> EmbeddingService:
+        if self._embedding_service is None:
+            from deep_research.rag.embedding import EmbeddingService
+
+            self._embedding_service = EmbeddingService()
+        return self._embedding_service
 
     # --- User Preferences ---
 

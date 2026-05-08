@@ -11,10 +11,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { createAnalysisStream } from './services/api'
-import type { StreamEvent, Conversation, Message, SourceItem } from './types/api'
+import { createAnalysisStream, uploadDocuments } from './services/api'
+import type { StreamEvent, Conversation, Message, SourceItem, UploadedDocument } from './types/api'
 import AnalysisProgress from './components/AnalysisProgress'
 import SourceCards from './components/SourceCards'
+import UploadedFiles from './components/UploadedFiles'
 
 // ---------------------------------------------------------------------------
 // 工具函数
@@ -60,9 +61,15 @@ export default function App() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
+  // 当前会话已上传文档
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+
   const streamRef = useRef<ReturnType<typeof createAnalysisStream> | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const currentConversation = conversations.find((c) => c.id === currentId)
 
@@ -118,6 +125,51 @@ export default function App() {
       setCurrentId(remaining.length > 0 ? remaining[0].id : null)
     }
   }, [currentId, conversations])
+
+  // ========================================================================
+  // 文件上传
+  // ========================================================================
+
+  const handleFileSelect = useCallback(
+    async (files: FileList | null) => {
+      if (!files || !files.length) return
+      const sid = currentConversation?.sessionId
+      if (!sid) return
+
+      setUploading(true)
+      try {
+        const res = await uploadDocuments(Array.from(files), sid)
+        setUploadedDocs((prev) => [...prev, ...res.uploaded])
+        if (res.failed.length) {
+          const names = res.failed.map((f) => f.filename).join('、')
+          console.warn(`上传失败: ${names}`)
+        }
+      } catch (e) {
+        console.error('上传文件失败:', e)
+      } finally {
+        setUploading(false)
+      }
+    },
+    [currentConversation?.sessionId],
+  )
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    setDragOver(false)
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      setDragOver(false)
+      handleFileSelect(e.dataTransfer.files)
+    },
+    [handleFileSelect],
+  )
 
   // ========================================================================
   // 发送消息
@@ -193,7 +245,8 @@ export default function App() {
     }
 
     // 创建 SSE 连接
-    const stream = createAnalysisStream(trimmed, sessionId)
+    const docIds = uploadedDocs.map((d) => d.doc_id)
+    const stream = createAnalysisStream(trimmed, sessionId, undefined, undefined, docIds.length > 0 ? docIds : undefined)
     streamRef.current = stream
 
     let assistantContent = ''
@@ -396,7 +449,14 @@ export default function App() {
     }
 
     // 用 confirmed_query 参数发送，后端直接跳过澄清进入研究
-    const stream = createAnalysisStream(confirmedText.trim(), sessionId, undefined, confirmedText.trim())
+    const docIds = uploadedDocs.map((d) => d.doc_id)
+    const stream = createAnalysisStream(
+      confirmedText.trim(),
+      sessionId,
+      undefined,
+      confirmedText.trim(),
+      docIds.length > 0 ? docIds : undefined,
+    )
     streamRef.current = stream
 
     let assistantContent = ''
@@ -696,6 +756,12 @@ export default function App() {
             )
           })}
         </div>
+
+        {/* 当前会话已上传文档 */}
+        <UploadedFiles
+          sessionId={currentConversation?.sessionId || ''}
+          onDocumentsChange={setUploadedDocs}
+        />
       </aside>
 
       {/* =====================================================================
@@ -709,7 +775,35 @@ export default function App() {
           minWidth: 0,
           position: 'relative',
         }}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
+        {dragOver && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 50,
+              background: 'rgba(59, 130, 246, 0.1)',
+              border: '2px dashed var(--accent-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'column',
+              gap: 12,
+              fontSize: '1.1rem',
+              color: 'var(--accent-primary)',
+            }}
+          >
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            松开即可上传 PDF / Word / 文本
+          </div>
+        )}
         {/* 顶部工具栏 */}
         <header
           style={{
@@ -934,6 +1028,36 @@ export default function App() {
               }}
               className="input-container"
             >
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.docx,.doc,.txt,.md,.markdown"
+                style={{ display: 'none' }}
+                onChange={(e) => handleFileSelect(e.target.files)}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isStreaming || uploading}
+                title="上传文件"
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 'var(--radius-md)',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  cursor: isStreaming || uploading ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              </button>
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -942,9 +1066,11 @@ export default function App() {
                 placeholder={
                   isStreaming
                     ? 'AI 正在分析，请稍候...'
+                    : uploading
+                    ? '正在上传文件…'
                     : '输入研究问题，例如：分析人工智能行业2025年发展趋势'
                 }
-                disabled={isStreaming}
+                disabled={isStreaming || uploading}
                 rows={Math.min(5, input.split('\n').length + 1)}
                 style={{
                   flex: 1,
@@ -1001,7 +1127,7 @@ export default function App() {
                 fontFamily: 'var(--font-mono)',
               }}
             >
-              内容仅供参考 · Enter 发送 · Shift+Enter 换行
+              内容仅供参考 · Enter 发送 · Shift+Enter 换行 · 支持拖拽上传 PDF / Word / 文本
             </p>
           </div>
         </div>
@@ -1016,7 +1142,7 @@ export default function App() {
 
 function MessageBubble({
   message,
-  isLast,
+  isLast: _isLast,
   onConfirmClarification,
 }: {
   message: Message
@@ -1296,7 +1422,7 @@ function MessageBubble({
 
 function ClarificationCard({
   question,
-  enrichedQuery,
+  enrichedQuery: _enrichedQuery,
   editedQuery,
   onEdit,
   onConfirm,

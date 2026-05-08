@@ -66,6 +66,8 @@ class OrchestratorAgent(BaseAgent):
         user_id: str = "anonymous",
         progress_callback: Optional[Callable[..., None]] = None,
         skip_clarification: bool = False,
+        document_ids: Optional[list[str]] = None,
+        document_collection: Optional[str] = None,
     ):
         cfg = get_settings().agents.orchestrator
         super().__init__(
@@ -97,6 +99,21 @@ class OrchestratorAgent(BaseAgent):
             user_id=user_id,
         )
         self.memory.init_session()
+
+        # Optional uploaded-document context for RAG-based deepresearch.
+        # If document_collection is not given but document_ids are, derive
+        # the collection from session_id (matches /api/documents/upload).
+        from deep_research.rag.pipeline import collection_for_session
+
+        self.document_ids: Optional[list[str]] = (
+            list(document_ids) if document_ids else None
+        )
+        if document_collection:
+            self.document_collection: Optional[str] = document_collection
+        elif self.document_ids:
+            self.document_collection = collection_for_session(self.memory.session_id)
+        else:
+            self.document_collection = None
 
         # Clarification state
         self._clarification_result: Optional[ClarificationResult] = None
@@ -237,6 +254,12 @@ class OrchestratorAgent(BaseAgent):
         now = datetime.now()
         date_context = f"【当前真实日期：{now.strftime('%Y年%m月%d日')}】"
         enriched_query = f"{merged_query}\n\n{date_context}"
+
+        # If user uploaded documents, surface that to the planner so it
+        # treats them as authoritative sources alongside the web.
+        document_hint = self._build_document_hint()
+        if document_hint:
+            enriched_query = f"{enriched_query}\n\n{document_hint}"
 
         logger.info(f"[Orchestrator] Starting V4 pipeline for: {enriched_query[:100]}...")
         session_dir = self.session_dir
@@ -497,7 +520,13 @@ class OrchestratorAgent(BaseAgent):
         t0 = time.perf_counter()
 
         workers_for_revision = [
-            ChapterWorker(chapter_outline=ch, session_dir=session_dir, trace_id=trace_id)
+            ChapterWorker(
+                chapter_outline=ch,
+                session_dir=session_dir,
+                trace_id=trace_id,
+                document_collection=self.document_collection,
+                document_ids=self.document_ids,
+            )
             for ch in outline.chapters
         ]
         revision_tasks = [
@@ -532,7 +561,13 @@ class OrchestratorAgent(BaseAgent):
     ) -> tuple[Path, Finding]:
         """Execute a single chapter: create worker, write, return file and finding."""
         trace_id = getattr(self, "_trace_id", None)
-        worker = ChapterWorker(chapter_outline=chapter, session_dir=session_dir, trace_id=trace_id)
+        worker = ChapterWorker(
+            chapter_outline=chapter,
+            session_dir=session_dir,
+            trace_id=trace_id,
+            document_collection=self.document_collection,
+            document_ids=self.document_ids,
+        )
         finding = await worker.execute()
         return worker.chapter_file, finding
 
@@ -578,3 +613,31 @@ class OrchestratorAgent(BaseAgent):
                 title = f.stem  # e.g., "chapter_c1"
                 sections[title] = content
         return sections
+
+    def _build_document_hint(self) -> str:
+        """Return a system hint describing the user's uploaded documents (or "")."""
+        if not self.document_collection:
+            return ""
+
+        try:
+            from deep_research.rag.pipeline import RAGPipeline
+
+            pipeline = RAGPipeline(collection_name=self.document_collection)
+            docs = pipeline.list_documents()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[Orchestrator] failed to list uploaded docs: {e}")
+            return ""
+
+        if self.document_ids:
+            allowed = set(self.document_ids)
+            docs = [d for d in docs if d.get("doc_id") in allowed]
+
+        if not docs:
+            return ""
+
+        names = "、".join(d.get("filename") or d.get("doc_id") or "?" for d in docs[:10])
+        return (
+            f"【用户已上传 {len(docs)} 份参考文档】{names}\n"
+            f"撰写时请优先使用 document_search 工具检索这些文档中的内容作为研究依据，"
+            f"必要时再结合联网搜索补充背景信息。引用文档时使用 [来源: 文件名] 格式。"
+        )

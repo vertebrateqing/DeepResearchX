@@ -5,7 +5,12 @@
  * 核心功能：通过 SSE (Server-Sent Events) 连接后端，实时接收分析数据。
  */
 
-import type { StreamEvent } from '../types/api'
+import type {
+  DocumentDeleteResponse,
+  DocumentListResponse,
+  DocumentUploadResponse,
+  StreamEvent,
+} from '../types/api'
 
 /** 后端 API 的基础地址 */
 const API_BASE_URL = 'http://localhost:8000/api'
@@ -21,8 +26,15 @@ const API_BASE_URL = 'http://localhost:8000/api'
  * @param sessionId 可选，已有会话 ID（多轮对话时传递）
  * @param model 可选，指定 LLM 模型
  * @param confirmedQuery 可选，用户在意图澄清卡片中确认的最终 prompt
+ * @param documentIds 可选，限定研究只引用这些已上传文档
  */
-export function createAnalysisStream(query: string, sessionId?: string, model?: string, confirmedQuery?: string) {
+export function createAnalysisStream(
+  query: string,
+  sessionId?: string,
+  model?: string,
+  confirmedQuery?: string,
+  documentIds?: string[],
+) {
   const params = new URLSearchParams()
   params.append('query', query)
   if (sessionId) {
@@ -33,6 +45,9 @@ export function createAnalysisStream(query: string, sessionId?: string, model?: 
   }
   if (confirmedQuery) {
     params.append('confirmed_query', confirmedQuery)
+  }
+  if (documentIds && documentIds.length > 0) {
+    documentIds.forEach((id) => params.append('document_ids', id))
   }
 
   const url = `${API_BASE_URL}/analyze/stream?${params.toString()}`
@@ -96,4 +111,52 @@ export function createAnalysisStream(query: string, sessionId?: string, model?: 
       eventSource.close()
     },
   }
+}
+
+// ---------------------------------------------------------------------------
+// 文档上传 / RAG 管理
+// ---------------------------------------------------------------------------
+
+export async function uploadDocuments(
+  files: File[],
+  sessionId: string,
+): Promise<DocumentUploadResponse> {
+  const formData = new FormData()
+  formData.append('session_id', sessionId)
+  files.forEach((f) => formData.append('files', f))
+
+  const res = await fetch(`${API_BASE_URL}/documents/upload`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`上传失败 (${res.status}): ${text}`)
+  }
+  return res.json()
+}
+
+export async function listDocuments(sessionId: string): Promise<DocumentListResponse> {
+  const res = await fetch(`${API_BASE_URL}/documents?session_id=${encodeURIComponent(sessionId)}`)
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`查询失败 (${res.status}): ${text}`)
+  }
+  return res.json()
+}
+
+export async function deleteDocument(
+  docId: string,
+  sessionId: string,
+): Promise<DocumentDeleteResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/documents/${encodeURIComponent(docId)}?session_id=${encodeURIComponent(sessionId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`删除失败 (${res.status}): ${text}`)
+  }
+  return res.json()
 }

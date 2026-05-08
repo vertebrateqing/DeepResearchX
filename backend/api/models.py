@@ -36,6 +36,10 @@ class AnalyzeRequest(BaseModel):
         description="可选，指定会话 ID 以恢复已有会话上下文（支持多轮对话）",
         examples=["sess_20250425_143022_a1b2c3"],
     )
+    document_ids: Optional[list[str]] = Field(
+        default=None,
+        description="可选，限定研究只参考这些已上传的文档 doc_id",
+    )
 
 
 class TaskCreatedResponse(BaseModel):
@@ -93,3 +97,49 @@ class StreamEvent(BaseModel):
         default_factory=datetime.now,
         description="事件发生时间",
     )
+
+
+# ---------------------------------------------------------------------------
+# Document upload / RAG models (used by /api/documents/*)
+# ---------------------------------------------------------------------------
+
+
+class DocumentInfo(BaseModel):
+    """已入库文档的元数据。"""
+
+    doc_id: str = Field(description="文档唯一 ID（服务端生成）")
+    filename: str = Field(description="原始文件名")
+    extension: str = Field(description="文件扩展名，例如 .pdf / .docx")
+    size_bytes: int = Field(default=0, description="原始文件大小（字节）")
+    char_count: int = Field(default=0, description="抽取后的文本字符数")
+    chunks: int = Field(default=0, description="切分后的向量块数量")
+    uploaded_at: str = Field(default="", description="入库时间（ISO 字符串）")
+
+
+class DocumentUploadResponse(BaseModel):
+    """上传接口的响应。"""
+
+    session_id: str
+    collection: str = Field(description="后端为本会话生成的向量集合名称")
+    uploaded: list[DocumentInfo] = Field(description="入库成功的文档列表")
+    failed: list[dict] = Field(
+        default_factory=list,
+        description="入库失败的文件，包含 filename 和 error 字段",
+    )
+
+
+class DocumentListResponse(BaseModel):
+    """列出会话文档的响应。"""
+
+    session_id: str
+    collection: str
+    documents: list[DocumentInfo]
+
+
+class DocumentDeleteResponse(BaseModel):
+    """删除单个文档的响应。"""
+
+    session_id: str
+    doc_id: str
+    chunks_removed: int
+    file_removed: bool

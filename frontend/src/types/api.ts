@@ -116,6 +116,44 @@ export interface SourceItem {
 }
 
 // ---------------------------------------------------------------------------
+// 文档上传 / RAG 类型
+// ---------------------------------------------------------------------------
+
+/** 已上传文档的元数据 */
+export interface UploadedDocument {
+  doc_id: string
+  filename: string
+  extension: string
+  size_bytes: number
+  char_count: number
+  chunks: number
+  uploaded_at: string
+}
+
+/** 上传接口响应 */
+export interface DocumentUploadResponse {
+  session_id: string
+  collection: string
+  uploaded: UploadedDocument[]
+  failed: Array<{ filename: string; error: string }>
+}
+
+/** 列出文档的响应 */
+export interface DocumentListResponse {
+  session_id: string
+  collection: string
+  documents: UploadedDocument[]
+}
+
+/** 删除文档的响应 */
+export interface DocumentDeleteResponse {
+  session_id: string
+  doc_id: string
+  chunks_removed: number
+  file_removed: boolean
+}
+
+// ---------------------------------------------------------------------------
 // 会话类型
 // ---------------------------------------------------------------------------
 
