@@ -14,6 +14,7 @@ from typing import Any
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient
 from deep_research.core.outline_planner import ChapterOutline
+from deep_research.utils import extract_json_from_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -218,13 +219,9 @@ class ReviserAgent:
     def _parse_review(self, content: str) -> ReviewResult:
         """Parse LLM review response into ReviewResult."""
         try:
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
-            data = json.loads(content.strip().lstrip("\ufeff"))
+            data = json.loads(extract_json_from_markdown(content).lstrip("\ufeff"))
         except (json.JSONDecodeError, IndexError):
-            logger.warning(f"[Reviser] Failed to parse review JSON, using fallback")
+            logger.warning("[Reviser] Failed to parse review JSON, using fallback")
             return ReviewResult(
                 passed=True,
                 scores={"objective_achieved": 7, "research_depth": 7, "data_reliability": 7, "rigor": 7, "formatting": 7},

@@ -15,6 +15,7 @@ from deep_research.core.base import AgentContext, BaseAgent, BaseSkill, BaseTool
 from deep_research.observability import get_langfuse
 from deep_research.core.context import AgentRunContext
 from deep_research.core.message import AgentMessage, MessageType
+from deep_research.utils import sanitize_unicode
 
 logger = logging.getLogger(__name__)
 
@@ -334,8 +335,7 @@ class ReActAgent(BaseAgent):
                 # No tool calls - this is the final answer
                 final_answer = message.get("content", "")
                 logger.info(f"Agent {self.name} final answer received, length={len(final_answer)}")
-                # Sanitize to remove invalid Unicode surrogates
-                final_answer = "".join(ch for ch in final_answer if not (0xD800 <= ord(ch) <= 0xDFFF))
+                final_answer = sanitize_unicode(final_answer)
                 break
 
         if not final_answer:
@@ -390,8 +390,7 @@ class ReActAgent(BaseAgent):
         messages = self._build_messages(user_input)
         response = await self.llm.chat(messages=messages, model=self.model)
         content = response["choices"][0]["message"].get("content", "")
-        # Sanitize to remove invalid Unicode surrogates
-        return "".join(ch for ch in content if not (0xD800 <= ord(ch) <= 0xDFFF))
+        return sanitize_unicode(content)
 
 
 class SimpleAgent(BaseAgent):
@@ -447,5 +446,4 @@ class SimpleAgent(BaseAgent):
 
         response = await self.llm.chat(messages=messages, model=self.model)
         content = response["choices"][0]["message"].get("content", "")
-        # Sanitize to remove invalid Unicode surrogates
-        return "".join(ch for ch in content if not (0xD800 <= ord(ch) <= 0xDFFF))
+        return sanitize_unicode(content)

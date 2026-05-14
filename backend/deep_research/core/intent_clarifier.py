@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from deep_research.core.agent import LLMClient
+from deep_research.utils import extract_json_from_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -303,11 +304,7 @@ class IntentClarifier:
 def _parse_json(content: str) -> Optional[dict]:
     """Extract and parse JSON from LLM response."""
     try:
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0]
-        return json.loads(content.strip().lstrip("\ufeff"))
+        return json.loads(extract_json_from_markdown(content).lstrip("\ufeff"))
     except (json.JSONDecodeError, IndexError, ValueError) as e:
         logger.warning(f"[IntentClarifier] JSON parse failed: {e}, content={content[:200]}")
         return None

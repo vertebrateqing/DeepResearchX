@@ -20,6 +20,7 @@ from deep_research.core.finding import Finding, Source
 from deep_research.core.message import AgentMessage
 from deep_research.core.outline_planner import ChapterOutline
 from deep_research.tools.web_search import WebSearchTool
+from deep_research.utils import unwrap_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +192,7 @@ class ChapterWorker:
         latency = time.perf_counter() - t0
 
         # Clean up - remove code block wrappers if present
-        chapter_text = _unwrap_markdown(chapter_text)
+        chapter_text = unwrap_markdown(chapter_text)
 
         # Add chapter header if missing
         if not chapter_text.strip().startswith("##"):
@@ -351,18 +352,6 @@ def _default_tools(
     tools.extend([WebSearchTool(), WebScraperTool()])
     return tools
 
-
-
-def _unwrap_markdown(text: str) -> str:
-    """Remove Markdown code block wrapper if present."""
-    text = text.strip()
-    if text.startswith("```markdown"):
-        text = text[len("```markdown"):]
-    elif text.startswith("```"):
-        text = text[len("```"):]
-    if text.endswith("```"):
-        text = text[:-len("```")]
-    return text.strip()
 
 
 def _extract_sources_from_text(text: str) -> list[Source]:

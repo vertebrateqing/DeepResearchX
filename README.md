@@ -36,7 +36,7 @@ A production-grade multi-agent deep research system that generates comprehensive
 │  │  │  ChapterWorker C2 ──┤── asyncio.gather (parallel)       │   │    │
 │  │  │  ChapterWorker C3 ──┘                                   │   │    │
 │  │  │       │                                                  │   │    │
-│  │  │  Each worker: WebSearch + WebScraper → LLM draft        │   │    │
+│  │  │  Each worker: predecessor content + WebSearch → LLM draft│   │    │
 │  │  └─────────────────────────────────────────────────────────┘   │    │
 │  │                          │                                      │    │
 │  │                          ▼                                      │    │
@@ -84,7 +84,8 @@ A production-grade multi-agent deep research system that generates comprehensive
 ## Features
 
 - **Multi-Agent Pipeline**: Structured 5-phase pipeline — clarification → outline → parallel research → review → integration → editing
-- **Parallel Chapter Execution**: Chapters with no dependencies run concurrently; dependent chapters execute in topological order
+- **DAG-Aware Dependency Injection**: Downstream chapters receive full upstream chapter content in their prompts, enabling true information flow across the research graph
+- **Parallel Chapter Execution**: Chapters with no dependencies run concurrently; dependent chapters execute in topological order and build upon predecessor findings
 - **Quality Review Loop**: Per-chapter automated scoring across 5 dimensions with feedback-driven revision (≤2 rounds)
 - **Real-Time Streaming**: SSE-based progress streaming — every phase update, tool call, and partial content delivered to the frontend
 - **LLM-Driven Query Enrichment**: Intent clarification uses a single LLM call to produce an enriched research prompt (filling in time range, scope, dimensions). The enriched prompt is shown to the user as an editable card — confirm as-is or refine before research begins
@@ -137,7 +138,8 @@ DeepResearchX/
 │       │   ├── web_search.py            # Tavily / DuckDuckGo
 │       │   ├── web_scraper.py           # Scrape + hybrid chunk ranking
 │       │   └── llm_call.py              # Direct LLM tool
-│       └── rag/                         # ChromaDB vector retrieval
+│       ├── rag/                         # ChromaDB vector retrieval
+│       └── utils/                       # Shared utilities (JSON parser, text utils)
 ├── frontend/
 │   └── src/
 │       ├── App.tsx                      # Multi-turn chat UI
@@ -424,7 +426,7 @@ DeepResearchX 是一个生产级多智能体深度研究系统，能够针对任
 │  │  │  ChapterWorker C2 ──┤── asyncio.gather（并行）          │   │    │
 │  │  │  ChapterWorker C3 ──┘                                   │   │    │
 │  │  │       │                                                  │   │    │
-│  │  │  每个 Worker：网络搜索 + 网页抓取 → LLM 生成章节草稿      │   │    │
+│  │  │  每个 Worker：前置章节内容 + 网络搜索 → LLM 生成章节草稿  │   │    │
 │  │  └─────────────────────────────────────────────────────────┘   │    │
 │  │                          │                                      │    │
 │  │                          ▼                                      │    │
@@ -472,7 +474,8 @@ DeepResearchX 是一个生产级多智能体深度研究系统，能够针对任
 ## 功能特性
 
 - **多智能体流水线**：五阶段结构化流水线——意图澄清 → 大纲规划 → 并行研究 → 质量审查 → 整合编辑
-- **并行章节执行**：无依赖的章节并发执行，有依赖的章节按拓扑顺序执行
+- **DAG 依赖上下文注入**：下游章节在 prompt 中接收上游章节的完整内容，实现研究图上的真实信息流
+- **并行章节执行**：无依赖的章节并发执行，有依赖的章节按拓扑顺序执行并基于前置结果继续深入
 - **质量审查循环**：每章自动评分（5个维度），基于反馈驱动修订（最多2轮）
 - **实时流式输出**：基于 SSE 的进度流——每个阶段更新、工具调用和部分内容实时推送到前端
 - **LLM 驱动的查询增强**：意图澄清模块通过单次 LLM 调用生成增强版研究提示词（自动补全时间范围、研究深度、分析维度），以可编辑卡片形式展示给用户，用户确认或修改后直接开始研究
@@ -525,7 +528,8 @@ DeepResearchX/
 │       │   ├── web_search.py            # Tavily / DuckDuckGo
 │       │   ├── web_scraper.py           # 网页抓取 + 混合排序
 │       │   └── llm_call.py              # 直接 LLM 调用工具
-│       └── rag/                         # ChromaDB 向量检索
+│       ├── rag/                         # ChromaDB 向量检索
+│       └── utils/                       # 共享工具（JSON 解析、文本处理）
 ├── frontend/
 │   └── src/
 │       ├── App.tsx                      # 多轮对话 UI

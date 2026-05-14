@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from deep_research.memory.models import SessionMemory
+from deep_research.utils import sanitize_unicode
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class SessionStore:
 
     def _sanitize_text(self, text: str) -> str:
         """Remove invalid Unicode surrogate characters from text."""
-        return "".join(ch for ch in text if not (0xD800 <= ord(ch) <= 0xDFFF))
+        return sanitize_unicode(text)
 
     def load(self, session_id: str) -> SessionMemory | None:
         """Load session from JSON."""

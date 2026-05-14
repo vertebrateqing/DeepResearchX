@@ -3,23 +3,24 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "financial-agent"
+name = "deepresearchx"
 version = "0.1.0"
-description = "A股分析Multi-Agent系统，支持市场分析、行业推荐、财报RAG和投资建议"
+description = "A production-grade multi-agent deep research system that generates comprehensive, structured reports on any topic."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Developer"},
+    {name = "DeepResearchX Contributors"},
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 dependencies = [
@@ -65,9 +66,7 @@ dev = [
 ]
 
 [project.scripts]
-a-stock-analyzer = "financial_agent.cli:main"
-ingest-reports = "financial_agent.scripts.ingest_reports:main"
-run-evaluation = "financial_agent.scripts.run_evaluation:main"
+drx-evaluate = "deep_research.scripts.run_evaluation:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["deep_research"]

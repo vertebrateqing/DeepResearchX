@@ -12,6 +12,7 @@ from typing import Any
 
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient
+from deep_research.utils import unwrap_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -119,13 +120,7 @@ class IntegrationAgent:
             latency = time.perf_counter() - t0
 
             # Clean up
-            draft_text = draft_text.strip()
-            if draft_text.startswith("```markdown"):
-                draft_text = draft_text[len("```markdown"):].strip()
-            if draft_text.startswith("```"):
-                draft_text = draft_text[3:].strip()
-            if draft_text.endswith("```"):
-                draft_text = draft_text[:-3].strip()
+            draft_text = unwrap_markdown(draft_text)
 
             # Ensure title
             if not draft_text.startswith("# "):

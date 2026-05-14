@@ -13,6 +13,7 @@ from typing import Any
 
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient
+from deep_research.utils import extract_json_from_markdown, unwrap_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -267,8 +268,7 @@ class EditorAgent:
 
             # Clean up
             revised = revised.strip()
-            if revised.startswith("```markdown"):
-                revised = revised[len("```markdown"):].strip()
+            revised = unwrap_markdown(revised)
             if revised.startswith("```"):
                 revised = revised[3:].strip()
             if revised.endswith("```"):
@@ -351,11 +351,7 @@ class EditorAgent:
     def _parse_edit(self, content: str) -> EditResult:
         """Parse LLM editorial response into EditResult."""
         try:
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
-            data = json.loads(content.strip().lstrip("\ufeff"))
+            data = json.loads(extract_json_from_markdown(content).lstrip("\ufeff"))
         except (json.JSONDecodeError, IndexError):
             logger.warning("[Editor] Failed to parse edit JSON, using fallback")
             return EditResult(

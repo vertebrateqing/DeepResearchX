@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from deep_research.core.agent import LLMClient
+from deep_research.utils import extract_json_from_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -85,15 +86,7 @@ class LLMJudge:
 
             # Extract JSON from response
             try:
-                # Try to find JSON block
-                if "```json" in content:
-                    json_str = content.split("```json")[1].split("```")[0]
-                elif "```" in content:
-                    json_str = content.split("```")[1].split("```")[0]
-                else:
-                    json_str = content
-
-                result = json.loads(json_str.strip())
+                result = json.loads(extract_json_from_markdown(content))
             except json.JSONDecodeError:
                 result = {
                     "raw_evaluation": content,

@@ -17,6 +17,7 @@ from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient
 from deep_research.core.finding import Finding
 from deep_research.core.research_plan import ResearchPlan, TaskNode
+from deep_research.utils import extract_json_from_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -116,13 +117,8 @@ class ResearchPlanner:
 
     def _parse_plan(self, content: str, user_query: str) -> ResearchPlan | None:
         """Parse LLM response into ResearchPlan."""
-        # Extract JSON
         try:
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
-            data = json.loads(content.strip().lstrip('\ufeff'))
+            data = json.loads(extract_json_from_markdown(content).lstrip('\ufeff'))
         except (json.JSONDecodeError, IndexError):
             logger.warning(f"[Planner] Failed to parse plan JSON: {content}")
             return None

@@ -15,6 +15,7 @@ from deep_research.memory.models import (
     UserPreferences,
 )
 from deep_research.memory.session_store import SessionStore
+from deep_research.utils import sanitize_unicode
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +124,7 @@ class MemoryManager:
     @staticmethod
     def _sanitize(text: str) -> str:
         """Remove invalid Unicode surrogate characters without corrupting valid text."""
-        # Strip lone surrogates (U+D800–U+DFFF) only; keep everything else intact.
-        return "".join(ch for ch in text if not (0xD800 <= ord(ch) <= 0xDFFF))
+        return sanitize_unicode(text)
 
     def add_user_message(self, content: str, metadata: dict[str, Any] | None = None) -> None:
         """Record a user message."""

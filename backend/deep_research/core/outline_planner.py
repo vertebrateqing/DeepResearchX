@@ -17,6 +17,7 @@ from typing import Any
 
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient
+from deep_research.utils import extract_json_from_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -265,12 +266,7 @@ class OutlinePlanner:
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
         # Step 1: Extract from markdown code block
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0]
-
-        content = content.strip().lstrip("\ufeff")
+        content = extract_json_from_markdown(content).lstrip("\ufeff")
 
         # Step 2: Replace Chinese quotation marks that break JSON
         content = content.replace("\u201c", '"').replace("\u201d", '"')
