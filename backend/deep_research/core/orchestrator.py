@@ -454,6 +454,7 @@ class OrchestratorAgent(BaseAgent):
         # --- Step 1: Topological execution ---
         chapter_map = {ch.chapter_id: ch for ch in outline.chapters}
         completed: set[str] = set()
+        completed_contents: dict[str, str] = {}   # chapter_id → full text for dependency injection
         chapter_findings: list[Finding] = []
         chapter_files: list[Path] = []
         remaining = list(outline.chapters)
@@ -485,9 +486,9 @@ class OrchestratorAgent(BaseAgent):
                 "progress": 30 + int(len(completed) / total * 20),
             })
 
-            # Execute ready batch in parallel
+            # Execute ready batch in parallel, passing accumulated predecessor contents
             batch_results = await asyncio.gather(
-                *[self._execute_single_chapter(ch, session_dir) for ch in ready],
+                *[self._execute_single_chapter(ch, session_dir, completed_contents) for ch in ready],
                 return_exceptions=True,
             )
 
@@ -509,6 +510,13 @@ class OrchestratorAgent(BaseAgent):
                 chapter_files.append(file_path)
                 chapter_findings.append(finding)
                 completed.add(ch.chapter_id)
+
+                # Cache chapter content for downstream dependency injection
+                if file_path.exists():
+                    try:
+                        completed_contents[ch.chapter_id] = file_path.read_text(encoding="utf-8")
+                    except Exception as e:
+                        logger.warning(f"[Orchestrator] Failed to read chapter {ch.chapter_id} for dependency cache: {e}")
 
             remaining = [ch for ch in remaining if ch.chapter_id not in completed]
 
@@ -558,15 +566,29 @@ class OrchestratorAgent(BaseAgent):
         self,
         chapter: ChapterOutline,
         session_dir: Path,
+        completed_contents: dict[str, str],
     ) -> tuple[Path, Finding]:
         """Execute a single chapter: create worker, write, return file and finding."""
         trace_id = getattr(self, "_trace_id", None)
+
+        # Filter predecessor contents by chapter.depends_on
+        dependency_contents: dict[str, str] = {}
+        for dep_id in chapter.depends_on:
+            if dep_id in completed_contents:
+                dependency_contents[dep_id] = completed_contents[dep_id]
+            else:
+                logger.warning(
+                    f"[Orchestrator] Chapter {chapter.chapter_id} depends on {dep_id} "
+                    "but content not yet available"
+                )
+
         worker = ChapterWorker(
             chapter_outline=chapter,
             session_dir=session_dir,
             trace_id=trace_id,
             document_collection=self.document_collection,
             document_ids=self.document_ids,
+            dependency_contents=dependency_contents,
         )
         finding = await worker.execute()
         return worker.chapter_file, finding
