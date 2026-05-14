@@ -31,6 +31,7 @@ from deep_research.core.finding import Finding
 from deep_research.core.intent_clarifier import (
     ClarificationResult,
     IntentClarifier,
+    ResearchPlanBrief,
 )
 from deep_research.core.integration import IntegrationAgent
 from deep_research.core.message import AgentMessage
@@ -118,6 +119,7 @@ class OrchestratorAgent(BaseAgent):
         # Clarification state
         self._clarification_result: Optional[ClarificationResult] = None
         self._total_clarification_rounds: int = 0
+        self._confirmed_plan_brief: Optional[ResearchPlanBrief] = None   # User-confirmed research plan
 
         # 恢复已有会话的澄清状态（支持多轮对话）
         cs = self.memory.session.clarification_state
@@ -204,13 +206,13 @@ class OrchestratorAgent(BaseAgent):
         if self._clarification_result is None:
             self._total_clarification_rounds = 0
 
-        # Step 2: Intent clarification
+        # Step 2: Intent clarification → structured research plan brief
         self._emit("status", {"message": "正在理解您的问题...", "stage": "intent", "progress": 5})
         if self.skip_clarification or self._total_clarification_rounds >= IntentClarifier.MAX_ROUNDS:
             clarification = ClarificationResult(
                 complete=True,
                 original_query=user_input,
-                enriched_query=user_input,
+                plan_brief=ResearchPlanBrief(research_topic=user_input),
             )
         else:
             clarification = await self.intent_clarifier.analyze(user_input)
@@ -221,7 +223,6 @@ class OrchestratorAgent(BaseAgent):
                 "status": "clarifying",
                 "round": clarification.rounds_completed,
                 "original_query": clarification.original_query,
-                "enriched_query": clarification.enriched_query,
                 "clarification_question": clarification.clarification_question,
             }
             await self.memory.save(sync_long_term=False)
@@ -235,19 +236,30 @@ class OrchestratorAgent(BaseAgent):
                 result={
                     "requires_clarification": True,
                     "prompt": question_text,
-                    "enriched_query": clarification.enriched_query,
+                    "plan_brief": clarification.plan_brief.to_prompt_block() if clarification.plan_brief else "",
                 },
             )
 
+        # Save confirmed plan brief for downstream injection
+        self._confirmed_plan_brief = clarification.plan_brief
+
         # Step 3: Execute deepresearch
-        enriched_query = clarification.enriched_query or user_input
-        return await self._execute_research(enriched_query, user_input, context)
+        # Build enriched_query from plan_brief for backward compatibility
+        enriched_query = (
+            clarification.plan_brief.to_prompt_block()
+            if clarification.plan_brief
+            else user_input
+        )
+        return await self._execute_research(
+            enriched_query, user_input, context, plan_brief=clarification.plan_brief
+        )
 
     async def _execute_research(
         self,
         merged_query: str,
         original_query: str,
         context: Optional[AgentContext] = None,
+        plan_brief: Optional[ResearchPlanBrief] = None,
     ) -> AgentMessage:
         """Execute V4 research pipeline."""
         from datetime import datetime
@@ -329,6 +341,8 @@ class OrchestratorAgent(BaseAgent):
             summary_points=outline.executive_summary_points,
             chapter_files=chapter_files,
             session_dir=session_dir,
+            original_query=original_query,
+            plan_brief=plan_brief,
         )
         t1 = time.perf_counter()
         if span_integration:
@@ -610,11 +624,17 @@ class OrchestratorAgent(BaseAgent):
             original_query=prev.original_query,
             clarification_question=prev.clarification_question,
             user_response=user_response,
+            existing_plan_brief=prev.plan_brief,
         )
         self._total_clarification_rounds += 1
 
-        enriched_query = result.enriched_query or prev.original_query
-        logger.debug(f"[Orchestrator] Clarified enriched query: {enriched_query[:100]}...")
+        # Build enriched_query from plan_brief for backward compatibility
+        enriched_query = (
+            result.plan_brief.to_prompt_block()
+            if result.plan_brief
+            else prev.original_query
+        )
+        logger.debug(f"[Orchestrator] Clarified plan: {enriched_query[:100]}...")
 
         self.memory.session.clarification_state = {
             "status": "completed",
@@ -623,7 +643,10 @@ class OrchestratorAgent(BaseAgent):
         }
         await self.memory.save()
         self._clarification_result = None
-        return await self._execute_research(enriched_query, prev.original_query)
+        self._confirmed_plan_brief = result.plan_brief
+        return await self._execute_research(
+            enriched_query, prev.original_query, plan_brief=result.plan_brief
+        )
 
     def _build_sections_from_chapters(self, chapter_files: list[Path]) -> dict[str, str]:
         """Build sections dict from chapter files for report metadata."""

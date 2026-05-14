@@ -12,25 +12,27 @@ from typing import Any
 
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient
+from deep_research.core.intent_clarifier import ResearchPlanBrief
 from deep_research.utils import unwrap_markdown
 
 logger = logging.getLogger(__name__)
 
 
-INTEGRATION_SYSTEM_PROMPT = """你是一位资深报告整合专家。你将收到一份报告标题、研究方向参考和多个已完成的章节文件。
+INTEGRATION_SYSTEM_PROMPT = """你是一位资深报告整合专家。你将收到一份报告标题、研究背景与目标、研究方向参考和多个已完成的章节文件。
 你的任务是将这些章节整合为一份连贯、完整的分析报告。
 
 整合要求：
 1. 按章节顺序排列，为章节之间添加过渡段落，确保逻辑流畅
 2. 消除跨章节的重复内容（合并或删减）
 3. 统一全文的术语、格式和引用风格
-4. 执行摘要必须基于各章节实际研究内容提炼核心发现，不得照搬研究方向参考中的要点
-5. 在所有章节之后添加"综合结论"章节：跨章节综合分析，给出最终判断和建议，400-600 字
-6. 在综合结论之后添加"参考来源"章节：整理各章节引用的信息来源
-7. 保持各章节的完整内容，不要过度压缩
-8. 报告开头应包含：标题、生成日期、执行摘要
+4. 执行摘要必须基于各章节实际研究内容提炼核心发现，同时呼应研究背景与目标
+5. 综合结论必须紧扣研究目标，回答用户最初提出的问题
+6. 在所有章节之后添加"综合结论"章节：跨章节综合分析，给出最终判断和建议，400-600 字
+7. 在综合结论之后添加"参考来源"章节：整理各章节引用的信息来源
+8. 保持各章节的完整内容，不要过度压缩
+9. 报告开头应包含：标题、生成日期、执行摘要
 
-注意：你是从零开始整合，没有历史对话上下文。所有信息来自提供的章节文件。"""
+注意：你是从零开始整合，没有历史对话上下文。所有信息来自提供的章节文件和研究背景。"""
 
 
 class IntegrationAgent:
@@ -46,6 +48,8 @@ class IntegrationAgent:
         summary_points: list[str],
         chapter_files: list[Path],
         session_dir: Path,
+        original_query: str = "",
+        plan_brief: ResearchPlanBrief | None = None,
     ) -> Path:
         """Merge all chapter files into a coherent draft.
 
@@ -54,6 +58,8 @@ class IntegrationAgent:
             summary_points: Executive summary bullet points.
             chapter_files: List of chapter markdown file paths.
             session_dir: Directory to save draft.md.
+            original_query: User's original raw input.
+            plan_brief: User-confirmed structured research plan.
 
         Returns:
             Path to the saved draft file.
@@ -85,12 +91,26 @@ class IntegrationAgent:
         all_chapters = "\n---\n".join(chapter_texts)
         summary_text = "\n".join(f"- {p}" for p in summary_points)
 
-        prompt = f"""请将以下章节整合为一份完整的分析报告。
+        # Build research context block from original query + confirmed plan brief
+        research_context = ""
+        if original_query or plan_brief:
+            parts = ["【研究背景与目标】"]
+            if original_query:
+                parts.append(f"用户原始请求: {original_query}")
+            if plan_brief:
+                parts.append(plan_brief.to_prompt_block())
+            parts.append(
+                "\n整合要求：执行摘要和综合结论必须紧扣上述研究目标，"
+                "回答用户最初提出的问题。不得偏离研究背景。\n"
+            )
+            research_context = "\n".join(parts)
+
+        prompt = f"""{research_context}
 
 【报告标题】
 {title}
 
-【研究方向参考（仅供参考，执行摘要和综合结论须基于章节实际内容生成）】
+【研究方向参考】
 {summary_text}
 
 【各章节内容】
@@ -98,9 +118,9 @@ class IntegrationAgent:
 
 请输出整合后的完整报告 Markdown 文本。要求：
 1. 以一级标题 # {title} 开头，包含生成日期
-2. 执行摘要（## 执行摘要）：基于各章节实际研究发现提炼 3-5 个核心结论要点，不得照搬上方参考要点
+2. 执行摘要（## 执行摘要）：基于各章节实际研究发现提炼 3-5 个核心结论要点，同时呼应研究背景与目标
 3. 各章节内容完整保留，章节间添加过渡段落
-4. 综合结论（## 综合结论）：跨章节综合分析，给出最终判断和建议，400-600 字
+4. 综合结论（## 综合结论）：跨章节综合分析，紧扣研究目标，给出最终判断和建议，400-600 字
 5. 参考来源（## 参考来源）：整理各章节中引用的信息来源
 6. 直接输出 Markdown，不要用代码块包装"""
 

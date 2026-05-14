@@ -140,6 +140,7 @@ async def analyze_stream(
                 yield _sse_format("clarification", {
                     "question": content.get("prompt", ""),
                     "enriched_query": content.get("enriched_query", ""),
+                    "plan_brief": content.get("plan_brief", ""),
                 })
                 yield _sse_format("complete", {"task_id": task_id, "message": "等待用户确认"})
             else:

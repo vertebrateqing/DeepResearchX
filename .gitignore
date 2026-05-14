@@ -85,3 +85,5 @@ models/
 .frontend.pid
 .backend.pid
 frontend/node_modules/
+.agents/
+.maw/
