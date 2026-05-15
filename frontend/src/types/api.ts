@@ -37,6 +37,10 @@ export interface AnalyzeRequest {
   query: string
   model?: string
   session_id?: string
+  document_ids?: string[]
+  documents_only?: boolean
+  chunking_strategy?: string
+  embedding_model?: string
 }
 
 export interface TaskResponse {
@@ -136,6 +140,8 @@ export interface DocumentUploadResponse {
   collection: string
   uploaded: UploadedDocument[]
   failed: Array<{ filename: string; error: string }>
+  chunking_strategy: string
+  embedding_model: string
 }
 
 /** 列出文档的响应 */

@@ -23,10 +23,15 @@ def client(tmp_path, monkeypatch):
     import api.documents as _doc_mod
     import deep_research.rag.pipeline as _pipe_mod
 
+    def _make_uploads_dir(sid):
+        p = tmp_path / "uploads"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
     monkeypatch.setattr(
         _doc_mod,
         "_session_uploads_dir",
-        lambda sid: tmp_path / "uploads",
+        _make_uploads_dir,
     )
     # Also redirect Chroma storage to a temp dir so tests don't pollute.
     monkeypatch.setattr(
@@ -47,8 +52,9 @@ class TestDocumentUploadAPI:
     def test_upload_requires_session_id(self, client):
         """Upload endpoint rejects missing session_id."""
         res = client.post("/api/documents/upload", data={})
-        assert res.status_code == 400
-        assert "session_id" in res.json()["detail"]
+        # FastAPI Form validation returns 422 for missing required fields
+        assert res.status_code == 422
+        assert "session_id" in str(res.json())
 
     def test_upload_and_list(self, client):
         """Happy path: upload a txt file, list it, delete it."""

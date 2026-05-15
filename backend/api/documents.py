@@ -23,6 +23,8 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from api.models import (
+    SUPPORTED_CHUNKING_STRATEGIES,
+    SUPPORTED_EMBEDDING_MODELS,
     DocumentDeleteResponse,
     DocumentInfo,
     DocumentListResponse,
@@ -63,6 +65,14 @@ def _validate_session(session_id: Optional[str]) -> str:
 async def upload_documents(
     session_id: str = Form(..., description="对话会话 ID，决定文档归属与检索范围"),
     files: list[UploadFile] = File(..., description="上传的 PDF / Word / 文本文件"),
+    chunking_strategy: str = Form(
+        default="recursive",
+        description=f"切分策略: {', '.join(SUPPORTED_CHUNKING_STRATEGIES)}",
+    ),
+    embedding_model: str = Form(
+        default="",
+        description=f"本地嵌入模型 (默认使用配置): {', '.join(SUPPORTED_EMBEDDING_MODELS)}",
+    ),
 ):
     """Receive one or more files, save to disk, ingest into Chroma."""
     sid = _validate_session(session_id)
@@ -74,9 +84,32 @@ async def upload_documents(
             detail=f"too many files ({len(files)} > {MAX_FILES_PER_REQUEST})",
         )
 
+    chunking_strategy = chunking_strategy.lower().strip()
+    if chunking_strategy not in SUPPORTED_CHUNKING_STRATEGIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported chunking strategy {chunking_strategy!r}; "
+            f"supported: {SUPPORTED_CHUNKING_STRATEGIES}",
+        )
+
+    embedding_model = embedding_model.strip()
+    if embedding_model and embedding_model not in SUPPORTED_EMBEDDING_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported embedding model {embedding_model!r}; "
+            f"supported: {SUPPORTED_EMBEDDING_MODELS}",
+        )
+
     upload_dir = _session_uploads_dir(sid)
     collection = collection_for_session(sid)
-    pipeline = await get_pipeline(collection)
+
+    # Build pipeline kwargs when non-default settings are requested.
+    pipeline_kwargs: dict = {"chunking_strategy": chunking_strategy}
+    if embedding_model:
+        from deep_research.rag.embedding import EmbeddingService
+        pipeline_kwargs["embedding_service"] = EmbeddingService(model_path=embedding_model)
+
+    pipeline = await get_pipeline(collection, **pipeline_kwargs)
 
     uploaded: list[DocumentInfo] = []
     failed: list[dict] = []
@@ -168,6 +201,8 @@ async def upload_documents(
         collection=collection,
         uploaded=uploaded,
         failed=failed,
+        chunking_strategy=chunking_strategy,
+        embedding_model=embedding_model or get_settings().embedding.local_model_path or "default",
     )
 
 

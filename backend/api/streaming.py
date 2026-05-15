@@ -36,6 +36,7 @@ async def analyze_stream(
     skip_clarification: bool = False,
     confirmed_query: Optional[str] = None,
     document_ids: Optional[list[str]] = None,
+    documents_only: bool = False,
 ) -> AsyncGenerator[str, None]:
     """
     执行分析并以 SSE 格式流式返回结果。
@@ -88,6 +89,7 @@ async def analyze_stream(
             progress_callback=on_progress,
             skip_clarification=skip_clarification,
             document_ids=document_ids or None,
+            documents_only=documents_only,
         )
 
         # 如果前端传入了用户确认的最终 prompt，直接用它研究，跳过澄清流程

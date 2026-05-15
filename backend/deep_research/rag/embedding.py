@@ -9,13 +9,14 @@ from deep_research.tools.embedding_call import EmbeddingTool
 class EmbeddingService:
     """High-level embedding service for RAG pipeline."""
 
-    def __init__(self) -> None:
+    def __init__(self, model_path: Optional[str] = None) -> None:
         self._tool: Optional[EmbeddingTool] = None
+        self._model_path = model_path
 
     @property
     def tool(self) -> EmbeddingTool:
         if self._tool is None:
-            self._tool = EmbeddingTool()
+            self._tool = EmbeddingTool(model_path=self._model_path)
         return self._tool
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:

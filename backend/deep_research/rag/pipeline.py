@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 from deep_research.config.settings import get_settings
 from deep_research.rag.document_loader import Document, load_document
-from deep_research.rag.text_splitter import RecursiveTextSplitter
+from deep_research.rag.chunking import get_splitter
 from deep_research.rag.vector_store import ChromaVectorStore
 
 if TYPE_CHECKING:
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 def _merge_retrieval_results(results: Iterable[Iterable[dict[str, Any]]]) -> list[dict[str, Any]]:
     """Merge multiple ranked result lists, dedup by id, keep the best score.
 
-    Used to combine vector and (future) BM25 hits before reranking. Items
+    Used to combine vector and BM25 hits before reranking. Items
     missing an ``id`` field are dropped. Final list is sorted by ``score``
     descending.
     """
@@ -92,13 +92,17 @@ class RAGPipeline:
         collection_name: str,
         chunk_size: Optional[int] = None,
         chunk_overlap: Optional[int] = None,
+        chunking_strategy: str = "recursive",
         embedding_service: Optional["EmbeddingService"] = None,
         vector_store: Optional[ChromaVectorStore] = None,
     ) -> None:
         self.collection_name = collection_name
-        self.splitter = RecursiveTextSplitter(
+        self.chunking_strategy = chunking_strategy
+        self.splitter = get_splitter(
+            strategy=chunking_strategy,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
+            embedding_service=embedding_service,
         )
         if embedding_service is None:
             from deep_research.rag.embedding import EmbeddingService
@@ -182,7 +186,7 @@ class RAGPipeline:
         logger.info(
             f"[RAGPipeline] ingested doc_id={doc_id} chunks={len(chunks)} "
             f"chars={len(document.content)} latency={latency:.2f}s "
-            f"collection={self.collection_name}"
+            f"collection={self.collection_name} strategy={self.chunking_strategy}"
         )
         return {
             "doc_id": doc_id,
@@ -198,18 +202,19 @@ class RAGPipeline:
         text: str,
         top_k: Optional[int] = None,
         doc_ids: Optional[list[str]] = None,
+        hybrid: bool = True,
     ) -> list[dict[str, Any]]:
         """Return the most relevant chunks for ``text``.
 
         If ``doc_ids`` is provided, retrieval is restricted to chunks that
         belong to one of those parent documents.
+        If ``hybrid`` is True (default), both vector similarity and BM25
+        are used and the results are merged with reciprocal rank fusion.
         """
         if not text.strip():
             return []
         cfg = get_settings().rag.retrieval
         k = top_k or cfg.top_k_final or 5
-
-        embedding = await self.embedding.embed_query(text)
 
         filter_dict: Optional[dict[str, Any]] = None
         if doc_ids:
@@ -218,19 +223,39 @@ class RAGPipeline:
             else:
                 filter_dict = {"doc_id": {"$in": list(doc_ids)}}
 
-        hits = await asyncio.to_thread(
+        # Vector retrieval
+        embedding = await self.embedding.embed_query(text)
+        vector_hits = await asyncio.to_thread(
             self.vector_store.search,
             embedding,
-            k,
+            cfg.top_k_vector or k * 2,
             filter_dict,
         )
-        # Chroma returns L2/cosine distances (lower is better) — convert to a
-        # similarity score so callers don't have to know.
-        for hit in hits:
+        for hit in vector_hits:
             distance = hit.get("score", 0.0)
             hit["distance"] = distance
             hit["score"] = max(0.0, 1.0 - float(distance))
-        return _merge_retrieval_results([hits])
+
+        if not hybrid:
+            return _merge_retrieval_results([vector_hits])
+
+        # BM25 retrieval
+        try:
+            from deep_research.rag.bm25_retriever import BM25Retriever
+
+            bm25 = BM25Retriever(
+                collection_name=self.collection_name,
+                top_k=cfg.top_k_bm25 or k * 2,
+                vector_store=self.vector_store,
+            )
+            bm25_hits = bm25.search(text, top_k=cfg.top_k_bm25 or k * 2, filter_dict=filter_dict)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[RAGPipeline] BM25 retrieval failed: {e}")
+            bm25_hits = []
+
+        # Reciprocal Rank Fusion (RRF) merging
+        merged = _reciprocal_rank_fusion(vector_hits, bm25_hits, k=k)
+        return merged
 
     # -- Manage ----------------------------------------------------------
     def list_documents(self) -> list[dict[str, Any]]:
@@ -296,6 +321,60 @@ class RAGPipeline:
 
 
 # ---------------------------------------------------------------------------
+# Retrieval merging helpers
+# ---------------------------------------------------------------------------
+
+
+def _reciprocal_rank_fusion(
+    vector_hits: list[dict[str, Any]],
+    bm25_hits: list[dict[str, Any]],
+    k: int = 60,
+    final_top_k: Optional[int] = None,
+) -> list[dict[str, Any]]:
+    """Merge two ranked lists using Reciprocal Rank Fusion (RRF).
+
+    RRF score = Σ 1 / (k + rank) for each list where the item appears.
+    Higher score = better.
+    """
+    cfg = get_settings().rag.retrieval
+    final_k = final_top_k or cfg.top_k_final or 10
+    rrf_k = k
+
+    scores: dict[str, float] = {}
+    details: dict[str, dict[str, Any]] = {}
+
+    def _register(hits: list[dict[str, Any]], source: str) -> None:
+        for rank, hit in enumerate(hits, start=1):
+            hid = hit.get("id")
+            if not hid:
+                continue
+            scores[hid] = scores.get(hid, 0.0) + 1.0 / (rrf_k + rank)
+            if hid not in details:
+                details[hid] = dict(hit)
+                details[hid]["sources"] = []
+            details[hid]["sources"].append(source)
+            # Keep best individual score for reference
+            if source == "vector":
+                details[hid]["vector_score"] = hit.get("score", 0.0)
+            elif source == "bm25":
+                details[hid]["bm25_score"] = hit.get("score", 0.0)
+
+    _register(vector_hits, "vector")
+    _register(bm25_hits, "bm25")
+
+    # Sort by RRF score descending
+    sorted_ids = sorted(scores.keys(), key=lambda i: scores[i], reverse=True)
+
+    results = []
+    for hid in sorted_ids[:final_k]:
+        item = details[hid]
+        item["rrf_score"] = round(scores[hid], 6)
+        item["score"] = round(scores[hid], 6)
+        results.append(item)
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Pipeline cache — avoid reloading vector stores per request
 # ---------------------------------------------------------------------------
 
@@ -304,14 +383,26 @@ _pipeline_cache: dict[str, RAGPipeline] = {}
 _pipeline_lock = asyncio.Lock()
 
 
-async def get_pipeline(collection_name: str) -> RAGPipeline:
-    """Return a cached RAGPipeline for ``collection_name`` (creates on first call)."""
-    if collection_name in _pipeline_cache:
-        return _pipeline_cache[collection_name]
+async def get_pipeline(collection_name: str, **kwargs: Any) -> RAGPipeline:
+    """Return a cached RAGPipeline for ``collection_name`` (creates on first call).
+
+    Additional ``kwargs`` are forwarded to ``RAGPipeline.__init__``.  If
+    kwargs differ from the cached instance, the cache is invalidated.
+    """
+    cache_key = collection_name
+    cached = _pipeline_cache.get(cache_key)
+    if cached and not kwargs:
+        return cached
+
+    # If kwargs provided (e.g. different chunking strategy or embedding model),
+    # bypass cache to avoid mixing incompatible pipelines.
+    if kwargs:
+        return RAGPipeline(collection_name=collection_name, **kwargs)
+
     async with _pipeline_lock:
-        if collection_name not in _pipeline_cache:
-            _pipeline_cache[collection_name] = RAGPipeline(collection_name=collection_name)
-        return _pipeline_cache[collection_name]
+        if cache_key not in _pipeline_cache:
+            _pipeline_cache[cache_key] = RAGPipeline(collection_name=collection_name)
+        return _pipeline_cache[cache_key]
 
 
 def reset_pipeline_cache() -> None:

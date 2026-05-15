@@ -131,6 +131,7 @@ class ChapterWorker:
         document_collection: Optional[str] = None,
         document_ids: Optional[list[str]] = None,
         dependency_contents: Optional[dict[str, str]] = None,
+        documents_only: bool = False,
     ):
         self.outline = chapter_outline
         self.session_dir = session_dir
@@ -142,9 +143,11 @@ class ChapterWorker:
         self.max_iterations = max_iterations
         self.document_collection = document_collection
         self.document_ids = list(document_ids) if document_ids else None
+        self.documents_only = documents_only
         self.tools = tools or _default_tools(
             document_collection=self.document_collection,
             allowed_doc_ids=self.document_ids,
+            documents_only=self.documents_only,
         )
         # Propagate trace_id to all tools
         for tool in self.tools:
@@ -331,11 +334,13 @@ class ChapterWorker:
 def _default_tools(
     document_collection: Optional[str] = None,
     allowed_doc_ids: Optional[list[str]] = None,
+    documents_only: bool = False,
 ) -> list[BaseTool]:
     """Get default set of tools for chapter workers.
 
     When ``document_collection`` is provided, prepend ``DocumentSearchTool``
     so the LLM can retrieve from user-uploaded documents.
+    When ``documents_only`` is true, skip web search / scraper tools.
     """
     from deep_research.tools.web_scraper import WebScraperTool
 
@@ -349,7 +354,8 @@ def _default_tools(
                 allowed_doc_ids=allowed_doc_ids,
             )
         )
-    tools.extend([WebSearchTool(), WebScraperTool()])
+    if not documents_only:
+        tools.extend([WebSearchTool(), WebScraperTool()])
     return tools
 
 

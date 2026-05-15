@@ -12,10 +12,10 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { createAnalysisStream, uploadDocuments } from './services/api'
-import type { StreamEvent, Conversation, Message, SourceItem, UploadedDocument } from './types/api'
+import type { StreamEvent, Conversation, Message, SourceItem } from './types/api'
 import AnalysisProgress from './components/AnalysisProgress'
 import SourceCards from './components/SourceCards'
-import UploadedFiles from './components/UploadedFiles'
+import UploadedFiles, { type RAGSettings } from './components/UploadedFiles'
 
 // ---------------------------------------------------------------------------
 // 工具函数
@@ -61,8 +61,13 @@ export default function App() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
-  // 当前会话已上传文档
-  const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([])
+  // RAG settings for the current session
+  const [ragSettings, setRagSettings] = useState<RAGSettings>({
+    chunkingStrategy: 'recursive',
+    embeddingModel: 'BAAI/bge-large-zh-v1.5',
+    documentsOnly: false,
+    selectedDocIds: [],
+  })
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
 
@@ -138,8 +143,19 @@ export default function App() {
 
       setUploading(true)
       try {
-        const res = await uploadDocuments(Array.from(files), sid)
-        setUploadedDocs((prev) => [...prev, ...res.uploaded])
+        const res = await uploadDocuments(
+          Array.from(files),
+          sid,
+          ragSettings.chunkingStrategy,
+          ragSettings.embeddingModel,
+        )
+        setRagSettings((prev) => ({
+          ...prev,
+          selectedDocIds: [
+            ...prev.selectedDocIds,
+            ...res.uploaded.map((u) => u.doc_id),
+          ],
+        }))
         if (res.failed.length) {
           const names = res.failed.map((f) => f.filename).join('、')
           console.warn(`上传失败: ${names}`)
@@ -150,7 +166,7 @@ export default function App() {
         setUploading(false)
       }
     },
-    [currentConversation?.sessionId],
+    [currentConversation?.sessionId, ragSettings.chunkingStrategy, ragSettings.embeddingModel],
   )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -245,8 +261,15 @@ export default function App() {
     }
 
     // 创建 SSE 连接
-    const docIds = uploadedDocs.map((d) => d.doc_id)
-    const stream = createAnalysisStream(trimmed, sessionId, undefined, undefined, docIds.length > 0 ? docIds : undefined)
+    const docIds = ragSettings.selectedDocIds.length > 0 ? ragSettings.selectedDocIds : undefined
+    const stream = createAnalysisStream(
+      trimmed,
+      sessionId,
+      undefined,
+      undefined,
+      docIds,
+      ragSettings.documentsOnly,
+    )
     streamRef.current = stream
 
     let assistantContent = ''
@@ -449,13 +472,14 @@ export default function App() {
     }
 
     // 用 confirmed_query 参数发送，后端直接跳过澄清进入研究
-    const docIds = uploadedDocs.map((d) => d.doc_id)
+    const docIds = ragSettings.selectedDocIds.length > 0 ? ragSettings.selectedDocIds : undefined
     const stream = createAnalysisStream(
       confirmedText.trim(),
       sessionId,
       undefined,
       confirmedText.trim(),
-      docIds.length > 0 ? docIds : undefined,
+      docIds,
+      ragSettings.documentsOnly,
     )
     streamRef.current = stream
 
@@ -760,7 +784,8 @@ export default function App() {
         {/* 当前会话已上传文档 */}
         <UploadedFiles
           sessionId={currentConversation?.sessionId || ''}
-          onDocumentsChange={setUploadedDocs}
+          settings={ragSettings}
+          onSettingsChange={setRagSettings}
         />
       </aside>
 

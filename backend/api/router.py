@@ -62,6 +62,10 @@ async def stream_analysis(
         None,
         description="可选，限定研究只参考这些已上传文档的 doc_id（多个时重复 query 参数）",
     ),
+    documents_only: bool = Query(
+        False,
+        description="为 true 时仅使用已上传文档进行研究，不调用联网搜索",
+    ),
 ):
     """
     SSE 流式分析端点。
@@ -74,6 +78,7 @@ async def stream_analysis(
         model: 可选的 LLM 模型名称
         confirmed_query: 用户在意图澄清卡片中编辑确认的最终 prompt
         document_ids: 可选，要在哪些上传文档内做 RAG 研究
+        documents_only: 为 true 时禁用联网搜索，仅基于上传文档研究
 
     返回：
         StreamingResponse — SSE 格式的事件流
@@ -86,6 +91,7 @@ async def stream_analysis(
             skip_clarification,
             confirmed_query,
             document_ids,
+            documents_only,
         ),
         media_type="text/event-stream",
         headers={
