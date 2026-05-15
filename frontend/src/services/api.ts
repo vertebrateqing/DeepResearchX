@@ -34,6 +34,7 @@ export function createAnalysisStream(
   model?: string,
   confirmedQuery?: string,
   documentIds?: string[],
+  documentsOnly?: boolean,
 ) {
   const params = new URLSearchParams()
   params.append('query', query)
@@ -48,6 +49,9 @@ export function createAnalysisStream(
   }
   if (documentIds && documentIds.length > 0) {
     documentIds.forEach((id) => params.append('document_ids', id))
+  }
+  if (documentsOnly) {
+    params.append('documents_only', 'true')
   }
 
   const url = `${API_BASE_URL}/analyze/stream?${params.toString()}`
@@ -120,9 +124,15 @@ export function createAnalysisStream(
 export async function uploadDocuments(
   files: File[],
   sessionId: string,
+  chunkingStrategy = 'recursive',
+  embeddingModel = '',
 ): Promise<DocumentUploadResponse> {
   const formData = new FormData()
   formData.append('session_id', sessionId)
+  formData.append('chunking_strategy', chunkingStrategy)
+  if (embeddingModel) {
+    formData.append('embedding_model', embeddingModel)
+  }
   files.forEach((f) => formData.append('files', f))
 
   const res = await fetch(`${API_BASE_URL}/documents/upload`, {

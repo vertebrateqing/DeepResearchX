@@ -119,6 +119,10 @@ body {
   to { opacity: 1; }
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .animate-message-enter {
   animation: message-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }

@@ -69,6 +69,7 @@ class OrchestratorAgent(BaseAgent):
         skip_clarification: bool = False,
         document_ids: Optional[list[str]] = None,
         document_collection: Optional[str] = None,
+        documents_only: bool = False,
     ):
         cfg = get_settings().agents.orchestrator
         super().__init__(
@@ -115,6 +116,8 @@ class OrchestratorAgent(BaseAgent):
             self.document_collection = collection_for_session(self.memory.session_id)
         else:
             self.document_collection = None
+
+        self.documents_only = documents_only
 
         # Clarification state
         self._clarification_result: Optional[ClarificationResult] = None
@@ -548,6 +551,7 @@ class OrchestratorAgent(BaseAgent):
                 trace_id=trace_id,
                 document_collection=self.document_collection,
                 document_ids=self.document_ids,
+                documents_only=self.documents_only,
             )
             for ch in outline.chapters
         ]
@@ -603,6 +607,7 @@ class OrchestratorAgent(BaseAgent):
             document_collection=self.document_collection,
             document_ids=self.document_ids,
             dependency_contents=dependency_contents,
+            documents_only=self.documents_only,
         )
         finding = await worker.execute()
         return worker.chapter_file, finding

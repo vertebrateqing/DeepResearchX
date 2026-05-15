@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 if not os.environ.get("HF_ENDPOINT"):
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
-# Module-level singleton for local embedding model to avoid repeated loading
-_local_model_singleton: Any = None
+# Module-level cache for local embedding models to avoid repeated loading.
+# Keyed by model path so multiple models can coexist.
+_local_models: dict[str, Any] = {}
 _local_model_lock = asyncio.Lock()
 
 
@@ -42,9 +43,10 @@ class EmbeddingTool(BaseTool):
         },
     }
 
-    def __init__(self) -> None:
+    def __init__(self, model_path: Optional[str] = None) -> None:
         self.settings = get_settings().embedding
         self._client: Optional[httpx.AsyncClient] = None
+        self._model_path = model_path
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -116,15 +118,15 @@ class EmbeddingTool(BaseTool):
 
     async def _embed_local(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings using local model."""
-        global _local_model_singleton
+        global _local_models
 
-        if _local_model_singleton is None:
+        model_path = self._model_path or self.settings.local_model_path or "BAAI/bge-large-zh-v1.5"
+
+        if model_path not in _local_models:
             async with _local_model_lock:
-                # Double-check after acquiring lock
-                if _local_model_singleton is None:
+                if model_path not in _local_models:
                     from sentence_transformers import SentenceTransformer
 
-                    model_path = self.settings.local_model_path or "BAAI/bge-large-zh-v1.5"
                     device = self.settings.device
                     if device == "auto":
                         try:
@@ -136,14 +138,15 @@ class EmbeddingTool(BaseTool):
                     logger.info(f"[Embedding] Loading local model: {model_path} on {device}")
                     t0 = time.perf_counter()
                     try:
-                        _local_model_singleton = SentenceTransformer(model_path, device=device)
+                        _local_models[model_path] = SentenceTransformer(model_path, device=device)
                     except Exception as e:
                         logger.warning(f"[Embedding] Failed to load model on {device}: {e}, falling back to CPU")
-                        _local_model_singleton = SentenceTransformer(model_path, device="cpu")
+                        _local_models[model_path] = SentenceTransformer(model_path, device="cpu")
                     logger.info(f"[Embedding] Model loaded in {time.perf_counter() - t0:.2f}s")
 
+        model = _local_models[model_path]
         t0 = time.perf_counter()
-        embeddings = _local_model_singleton.encode(
+        embeddings = model.encode(
             texts,
             batch_size=self.settings.batch_size,
             show_progress_bar=False,

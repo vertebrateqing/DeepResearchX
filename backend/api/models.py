@@ -40,6 +40,10 @@ class AnalyzeRequest(BaseModel):
         default=None,
         description="可选，限定研究只参考这些已上传的文档 doc_id",
     )
+    documents_only: bool = Field(
+        default=False,
+        description="为 true 时仅使用已上传文档进行研究，不调用联网搜索",
+    )
 
 
 class TaskCreatedResponse(BaseModel):
@@ -116,6 +120,14 @@ class DocumentInfo(BaseModel):
     uploaded_at: str = Field(default="", description="入库时间（ISO 字符串）")
 
 
+SUPPORTED_CHUNKING_STRATEGIES = ["recursive", "fixed", "semantic"]
+SUPPORTED_EMBEDDING_MODELS = [
+    "BAAI/bge-large-zh-v1.5",
+    "BAAI/bge-small-zh-v1.5",
+    "BAAI/bge-m3",
+]
+
+
 class DocumentUploadResponse(BaseModel):
     """上传接口的响应。"""
 
@@ -126,6 +138,8 @@ class DocumentUploadResponse(BaseModel):
         default_factory=list,
         description="入库失败的文件，包含 filename 和 error 字段",
     )
+    chunking_strategy: str = Field(default="recursive", description="本次上传使用的切分策略")
+    embedding_model: str = Field(default="", description="本次上传使用的嵌入模型")
 
 
 class DocumentListResponse(BaseModel):
