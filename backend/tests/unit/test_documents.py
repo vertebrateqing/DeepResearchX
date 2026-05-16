@@ -23,17 +23,42 @@ def client(tmp_path, monkeypatch):
     import api.documents as _doc_mod
     import deep_research.rag.pipeline as _pipe_mod
 
-    monkeypatch.setattr(
-        _doc_mod,
-        "_session_uploads_dir",
-        lambda sid: tmp_path / "uploads",
-    )
-    # Also redirect Chroma storage to a temp dir so tests don't pollute.
-    monkeypatch.setattr(
-        _pipe_mod,
-        "_pipeline_cache",
-        {},
-    )
+    def _mock_uploads_dir(sid: str) -> Path:
+        p = tmp_path / "uploads"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    monkeypatch.setattr(_doc_mod, "_session_uploads_dir", _mock_uploads_dir)
+
+    # Mock RAG pipeline to avoid loading heavy embedding models in unit tests
+    class _MockPipeline:
+        def __init__(self, collection: str) -> None:
+            self.collection = collection
+            self._docs: dict[str, dict] = {}
+
+        async def ingest_file(self, file_path, doc_id, extra_metadata=None):
+            self._docs[doc_id] = {
+                "doc_id": doc_id,
+                "char_count": 32,
+                "chunks": 1,
+            }
+            return self._docs[doc_id]
+
+        def list_documents(self):
+            return list(self._docs.values())
+
+        async def delete_document(self, doc_id):
+            return self._docs.pop(doc_id, None) is not None
+
+    _pipelines: dict[str, _MockPipeline] = {}
+
+    async def _mock_get_pipeline(collection: str):
+        if collection not in _pipelines:
+            _pipelines[collection] = _MockPipeline(collection)
+        return _pipelines[collection]
+
+    monkeypatch.setattr(_doc_mod, "get_pipeline", _mock_get_pipeline)
+    monkeypatch.setattr(_pipe_mod, "_pipeline_cache", _pipelines)
 
     try:
         from main import app
@@ -47,8 +72,8 @@ class TestDocumentUploadAPI:
     def test_upload_requires_session_id(self, client):
         """Upload endpoint rejects missing session_id."""
         res = client.post("/api/documents/upload", data={})
-        assert res.status_code == 400
-        assert "session_id" in res.json()["detail"]
+        assert res.status_code == 422
+        assert "session_id" in res.json()["detail"][0]["loc"]
 
     def test_upload_and_list(self, client):
         """Happy path: upload a txt file, list it, delete it."""

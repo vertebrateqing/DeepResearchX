@@ -5,11 +5,6 @@ import argparse
 import asyncio
 import json
 import logging
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from deep_research.evaluation.evaluator import AgentEvaluator
 from deep_research.evaluation.report import EvaluationReport
 

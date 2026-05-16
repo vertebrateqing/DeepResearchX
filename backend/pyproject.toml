@@ -3,18 +3,18 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "financial-agent"
+name = "deep-research"
 version = "0.1.0"
-description = "A股分析Multi-Agent系统，支持市场分析、行业推荐、财报RAG和投资建议"
-readme = "README.md"
+description = "Multi-Agent Deep Research System with RAG-based report generation"
+readme = "../README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Developer"},
+    {name = "DeepResearchX Contributors"},
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -24,6 +24,9 @@ classifiers = [
 
 dependencies = [
     # Core
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "sse-starlette>=2.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "pyyaml>=6.0",
@@ -36,6 +39,7 @@ dependencies = [
     "rank-bm25>=0.2",
     "sentence-transformers>=3.0",
     "langdetect>=1.0",
+    "jieba>=0.42",
     # Document processing
     "PyPDF2>=3.0",
     "pdfplumber>=0.10",
@@ -48,26 +52,28 @@ dependencies = [
     # Web search
     "tavily-python>=0.3",
     "duckduckgo-search>=6.0",
+    "beautifulsoup4>=4.12",
     # Report generation
     "markdown>=3.5",
     "weasyprint>=60.0",
-    # Testing
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-    "pytest-cov>=5.0",
+    # Observability
+    "langfuse>=2.0,<3.0",
+    # Local PostgreSQL for Langfuse
+    "pgserver>=0.1.4",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
     "ruff>=0.4",
     "mypy>=1.9",
     "black>=24.0",
 ]
 
 [project.scripts]
-a-stock-analyzer = "financial_agent.cli:main"
-ingest-reports = "financial_agent.scripts.ingest_reports:main"
-run-evaluation = "financial_agent.scripts.run_evaluation:main"
+run-evaluation = "deep_research.scripts.run_evaluation:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["deep_research"]
