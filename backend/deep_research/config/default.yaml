@@ -34,29 +34,34 @@ llm:
   timeout: 120
 
 # Embedding配置
+#
+# 默认走云端 (provider=openai)，开箱即用，无需下载本地模型。
+# 若需切换为本地模型 (BAAI/bge-*, m3e-base 等)，请：
+#   1. 安装可选依赖：cd backend && uv sync --extra local-embedding
+#   2. 将 provider 改为 local，并配置 local_model_path / device
 embedding:
-  provider: local
+  provider: ${EMBEDDING_PROVIDER:-openai}
 
-  # Embedding模型名称 (仅 provider=openai 时生效)
-  # OpenAI: text-embedding-3-large, text-embedding-3-small, text-embedding-ada-002
-  # 智谱AI: embedding-3
+  # provider=openai 时使用的远端 embedding 模型名
+  # OpenAI:   text-embedding-3-large, text-embedding-3-small
+  # 通义千问: text-embedding-v1, text-embedding-v2
+  # 智谱AI:   embedding-3
   # 百度千帆: embedding-v1
-  # 本地: BAAI/bge-large-zh-v1.5, BAAI/bge-m3, moka-ai/m3e-base
-  model: text-embedding-v1
+  model: ${EMBEDDING_MODEL:-text-embedding-v1}
 
-  api_key: ${LLM_API_KEY}
+  api_key: ${EMBEDDING_API_KEY:-${LLM_API_KEY}}
 
-  # Embedding API base_url (provider=openai 时生效)
-  # OpenAI: https://api.openai.com/v1/embeddings
-  # 智谱AI: https://open.bigmodel.cn/api/paas/v4/embeddings
-  # 百度千帆: https://qianfan.baidubce.com/v2/embeddings
+  # provider=openai 时调用的 embeddings 接口完整 URL
+  # OpenAI:   https://api.openai.com/v1/embeddings
   # 通义千问: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
-  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+  # 智谱AI:   https://open.bigmodel.cn/api/paas/v4/embeddings
+  base_url: ${EMBEDDING_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings}
 
-  # 请求超时(秒)。若在中国大陆访问OpenAI较慢，建议改小timeout以快速失败，或切换为国内API
+  # 请求超时(秒)。若在中国大陆访问 OpenAI 较慢，建议改小 timeout 快速失败，或切换为国内 API
   timeout: 30
 
-  # 本地模型配置 (当 provider=local 时使用)
+  # 本地模型 (sentence-transformers) 配置——仅 provider=local 时生效
+  # 需要先安装可选依赖：uv sync --extra local-embedding
   local_model_path: BAAI/bge-large-zh-v1.5
   batch_size: 32
   device: auto  # auto / cpu / cuda

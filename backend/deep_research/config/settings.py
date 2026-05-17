@@ -1,15 +1,38 @@
 from __future__ import annotations
-"""Configuration management for DeepResearch."""
+
+"""Configuration management for DeepResearchX.
+
+Settings precedence (highest first):
+1. Environment variables (e.g. ``LLM_API_KEY``)
+2. ``.env`` file at the project root (loaded once at import time)
+3. Defaults defined in ``config/default.yaml``
+4. Field defaults declared on the pydantic models below
+"""
 
 import os
+import re
 from pathlib import Path
 from typing import Any, Literal, Optional, Union
 
 import yaml
-from pydantic import Field, field_validator
+from dotenv import load_dotenv
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "default.yaml"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]  # backend/
+
+# Load .env once at import. Look in the backend dir, then the repo root.
+for env_dir in (PROJECT_ROOT, PROJECT_ROOT.parent):
+    env_file = env_dir / ".env"
+    if env_file.exists():
+        load_dotenv(env_file, override=False)
+        break
+
+
+# ---------------------------------------------------------------------------
+# Sub-config models
+# ---------------------------------------------------------------------------
 
 
 class LLMConfig(BaseSettings):
@@ -21,7 +44,7 @@ class LLMConfig(BaseSettings):
     max_tokens: int = 4096
     timeout: int = 120
 
-    model_config = SettingsConfigDict(env_prefix="LLM_")
+    model_config = SettingsConfigDict(env_prefix="LLM_", extra="ignore")
 
 
 class EmbeddingConfig(BaseSettings):
@@ -34,7 +57,7 @@ class EmbeddingConfig(BaseSettings):
     batch_size: int = 32
     device: Literal["auto", "cpu", "cuda"] = "auto"
 
-    model_config = SettingsConfigDict(env_prefix="EMBEDDING_")
+    model_config = SettingsConfigDict(env_prefix="EMBEDDING_", extra="ignore")
 
 
 class VectorDBConfig(BaseSettings):
@@ -83,8 +106,8 @@ class WebScraperConfig(BaseSettings):
     max_pages: int = 5
     chunk_size: int = 2048
     chunk_overlap: int = 128
-    max_text_length: int = 30000  # Max chars per page, truncate if exceeded
-    max_chunks_for_embedding: int = 50  # Skip similarity filtering if chunks exceed this
+    max_text_length: int = 30000
+    max_chunks_for_embedding: int = 50
 
 
 class DataSourcesConfig(BaseSettings):
@@ -99,7 +122,8 @@ class AgentConfig(BaseSettings):
 
 class VLMConfig(BaseSettings):
     enabled: bool = False
-    model_config = SettingsConfigDict(env_prefix="VLM_")
+
+    model_config = SettingsConfigDict(env_prefix="VLM_", extra="ignore")
 
 
 class AgentsConfig(BaseSettings):
@@ -114,8 +138,6 @@ class LoggingConfig(BaseSettings):
 
 
 class OutputConfig(BaseSettings):
-    """Output directory configuration for generated reports."""
-
     output_dir: str = "./deep_research/data/output"
 
 
@@ -130,17 +152,18 @@ class LangfuseConfig(BaseSettings):
     record_dataset: bool = False
     dataset_max_items: int = 1
 
-    model_config = SettingsConfigDict(env_prefix="LANGFUSE_")
+    model_config = SettingsConfigDict(env_prefix="LANGFUSE_", extra="ignore")
+
+
+# ---------------------------------------------------------------------------
+# Top-level settings
+# ---------------------------------------------------------------------------
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from YAML and environment variables."""
+    """Application settings loaded from YAML + environment variables."""
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(extra="ignore")
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
@@ -154,80 +177,55 @@ class Settings(BaseSettings):
 
     @classmethod
     def from_yaml(cls, path: Union[str, Path] = DEFAULT_CONFIG_PATH) -> "Settings":
-        """Load settings from YAML file, with environment variable overrides."""
+        """Load settings from YAML, expanding ``${VAR}`` / ``${VAR:-default}`` patterns."""
         path = Path(path)
         if not path.exists():
             return cls()
 
-        # Load .env file into os.environ before expanding YAML variables
-        _load_dotenv(Path(path).parent.parent)
-
         with open(path, "r", encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
 
-        # Expand environment variables in string values
-        raw = _expand_env_vars(raw)
-        return cls(**raw)
+        return cls(**_expand_env_vars(raw))
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert settings to dictionary."""
         return self.model_dump()
 
 
-def _load_dotenv(search_dir: Path) -> None:
-    """Load .env file from search_dir or its parents into os.environ (no-op if not found)."""
-    for directory in [search_dir, search_dir.parent]:
-        env_file = directory / ".env"
-        if env_file.exists():
-            with open(env_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    key, _, value = line.partition("=")
-                    key = key.strip()
-                    value = value.strip().strip('"').strip("'")
-                    if key and key not in os.environ:
-                        os.environ[key] = value
-            break
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+_ENV_PATTERN = re.compile(r"\$\{(\w+)(?::-([^}]*))?\}")
 
 
 def _expand_env_vars(obj: Any) -> Any:
-    """Recursively expand ${VAR} and ${VAR:-default} patterns."""
+    """Recursively expand ``${VAR}`` / ``${VAR:-default}`` in nested data."""
     if isinstance(obj, dict):
         return {k: _expand_env_vars(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return [_expand_env_vars(v) for v in obj]
-    elif isinstance(obj, str):
-        return _expand_env_str(obj)
+    if isinstance(obj, str):
+        return _ENV_PATTERN.sub(_replace_env, obj)
     return obj
 
 
-def _expand_env_str(s: str) -> str:
-    """Expand environment variables in a string."""
-    import re
-
-    pattern = re.compile(r"\$\{(\w+)(?::-([^}]*))?\}")
-
-    def replacer(match: re.Match) -> str:
-        var_name = match.group(1)
-        default = match.group(2)
-        value = os.environ.get(var_name)
-        if value is not None:
-            return value
-        if default is not None:
-            return default
-        return match.group(0)
-
-    return pattern.sub(replacer, s)
+def _replace_env(match: re.Match) -> str:
+    var_name = match.group(1)
+    default = match.group(2)
+    value = os.environ.get(var_name)
+    if value is not None:
+        return value
+    if default is not None:
+        return default
+    return match.group(0)
 
 
-# Global settings instance
 _settings: Optional[Settings] = None
 
 
 def get_settings() -> Settings:
-    """Get global settings instance (singleton)."""
+    """Return the process-wide settings singleton."""
     global _settings
     if _settings is None:
         _settings = Settings.from_yaml()
@@ -235,7 +233,7 @@ def get_settings() -> Settings:
 
 
 def reload_settings() -> Settings:
-    """Reload settings from file."""
+    """Force reload — useful in tests."""
     global _settings
     _settings = Settings.from_yaml()
     return _settings

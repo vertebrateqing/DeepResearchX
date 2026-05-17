@@ -6,8 +6,9 @@ Tests verify that:
 3. Phase spans (outline, chapters, integration, editing) are created
 
 Requires:
-  - Langfuse v2 server running at localhost:3000
-  - LANGFUSE_ENABLED=true in environment
+  - Langfuse v2 server running at ``LANGFUSE_HOST`` (defaults to localhost:3000)
+  - ``LANGFUSE_PUBLIC_KEY`` and ``LANGFUSE_SECRET_KEY`` set in the environment
+    (e.g. via ``backend/.env`` or shell exports). Tests skip if either is empty.
 """
 import os
 import sys
@@ -15,18 +16,20 @@ import time
 
 import pytest
 
-# Set env before any imports
-os.environ["LANGFUSE_ENABLED"] = "true"
-os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-107cfd09-4458-47e7-b694-649d966ac71c"
-os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-4ab52db8-24b0-4d58-ba8d-6d4700d745f0"
-os.environ["LANGFUSE_HOST"] = "http://localhost:3000"
+# Defaults — the tests rely on credentials being provided via the environment
+# (no hardcoded secrets). Skip if creds are absent.
+os.environ.setdefault("LANGFUSE_ENABLED", "true")
+os.environ.setdefault("LANGFUSE_HOST", "http://localhost:3000")
 
-# Reset settings singleton and langfuse client
+_creds_present = bool(
+    os.environ.get("LANGFUSE_PUBLIC_KEY") and os.environ.get("LANGFUSE_SECRET_KEY")
+)
+
+# Reset settings singleton and langfuse client so env overrides take effect
 import deep_research.observability as _obs
 
 _obs._client = None
 
-from deep_research.config.settings import Settings as _Settings
 import deep_research.config.settings as _cfg_mod
 
 _cfg_mod._settings = None
@@ -34,7 +37,7 @@ _cfg_mod._settings = None
 from deep_research.observability import get_langfuse
 
 
-lf = get_langfuse()
+lf = get_langfuse() if _creds_present else None
 
 
 # Check if Langfuse server is reachable
@@ -55,8 +58,11 @@ if lf is not None:
 
 
 pytestmark = pytest.mark.skipif(
-    not _server_available,
-    reason="Langfuse server not running at localhost:3000. Start it with: cd ~/langfuse-server && pnpm run dev",
+    not (_creds_present and _server_available),
+    reason=(
+        "Langfuse integration tests require LANGFUSE_PUBLIC_KEY / "
+        "LANGFUSE_SECRET_KEY in env AND a server reachable at LANGFUSE_HOST."
+    ),
 )
 
 

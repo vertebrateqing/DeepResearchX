@@ -1,7 +1,7 @@
 from __future__ import annotations
 """Document loading for RAG ingest.
 
-Supports PDF (pdfplumber → PyPDF2 fallback), Word (.docx via python-docx),
+Supports PDF (pdfplumber → pypdf fallback), Word (.docx via python-docx),
 and plain text (.txt / .md). Returns ``Document`` objects holding raw text
 plus metadata. The actual splitting / embedding lives in
 ``deep_research.rag.pipeline``.
@@ -40,7 +40,7 @@ class Document:
 
 
 def _load_pdf(file_path: Path) -> str:
-    """Extract text from a PDF, preferring pdfplumber and falling back to PyPDF2."""
+    """Extract text from a PDF, preferring pdfplumber and falling back to pypdf."""
     try:
         import pdfplumber  # type: ignore
 
@@ -53,12 +53,12 @@ def _load_pdf(file_path: Path) -> str:
         if texts:
             return "\n\n".join(texts)
     except ImportError:
-        logger.debug("pdfplumber not installed, falling back to PyPDF2")
+        logger.debug("pdfplumber not installed, falling back to pypdf")
     except Exception as e:  # noqa: BLE001
         logger.warning(f"pdfplumber failed for {file_path}: {e}")
 
     try:
-        from PyPDF2 import PdfReader  # type: ignore
+        from pypdf import PdfReader  # type: ignore
 
         reader = PdfReader(str(file_path))
         texts: list[str] = []
@@ -69,10 +69,10 @@ def _load_pdf(file_path: Path) -> str:
         return "\n\n".join(texts)
     except ImportError as e:
         raise RuntimeError(
-            "PDF support unavailable: install pdfplumber or PyPDF2"
+            "PDF support unavailable: install pdfplumber or pypdf"
         ) from e
     except Exception as e:  # noqa: BLE001
-        logger.error(f"PyPDF2 failed for {file_path}: {e}")
+        logger.error(f"pypdf failed for {file_path}: {e}")
         return ""
 
 

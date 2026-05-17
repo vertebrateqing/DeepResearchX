@@ -3,7 +3,7 @@ from __future__ import annotations
 
 Supports:
 - HTML pages (text extraction via BeautifulSoup)
-- PDF files (text extraction via PyPDF2/pdfplumber)
+- PDF files (text extraction via pdfplumber / pypdf)
 - URL deduplication
 - Configurable text chunking with overlap
 - Vector similarity filtering against query
@@ -172,7 +172,7 @@ def _clean_text(text: str) -> str:
 
 # Check library availability once at module load time
 _has_pdfplumber = False
-_has_pypdf2 = False
+_has_pypdf = False
 
 try:
     import pdfplumber
@@ -181,16 +181,16 @@ except ImportError:
     pass
 
 try:
-    from PyPDF2 import PdfReader
-    _has_pypdf2 = True
+    from pypdf import PdfReader
+    _has_pypdf = True
 except ImportError:
     pass
 
-if not _has_pdfplumber and not _has_pypdf2:
+if not _has_pdfplumber and not _has_pypdf:
     logger.warning(
-        "Neither pdfplumber nor PyPDF2 is installed. "
+        "Neither pdfplumber nor pypdf is installed. "
         "PDF scraping will return empty text. "
-        "Install with: pip install pdfplumber PyPDF2"
+        "Install with: pip install pdfplumber pypdf"
     )
 
 
@@ -217,10 +217,10 @@ def extract_text_from_pdf(file_path: str | Path) -> str:
     else:
         logger.debug("pdfplumber not available, skipping")
 
-    # Fallback to PyPDF2
-    if _has_pypdf2:
+    # Fallback to pypdf
+    if _has_pypdf:
         try:
-            from PyPDF2 import PdfReader
+            from pypdf import PdfReader
 
             reader = PdfReader(str(file_path))
             texts = []
@@ -231,14 +231,14 @@ def extract_text_from_pdf(file_path: str | Path) -> str:
 
             return "\n\n".join(texts) if texts else ""
         except Exception as e:
-            logger.warning(f"PyPDF2 extraction failed for {file_path}: {e}")
+            logger.warning(f"pypdf extraction failed for {file_path}: {e}")
             return ""
     else:
-        logger.debug("PyPDF2 not available, skipping")
+        logger.debug("pypdf not available, skipping")
 
     logger.warning(
         f"PDF extraction unavailable for {file_path}. "
-        f"Install pdfplumber or PyPDF2 to enable PDF support."
+        f"Install pdfplumber or pypdf to enable PDF support."
     )
     return ""
 

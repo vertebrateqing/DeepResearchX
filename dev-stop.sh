@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Financial DeepResearch — 开发环境一键关闭脚本
+# DeepResearchX — 开发环境一键关闭脚本
 # 适用于：Linux / macOS / WSL (Windows Subsystem for Linux)
 # =============================================================================
 
@@ -18,7 +18,7 @@ BACKEND_LOG="$PROJECT_DIR/backend.log"
 FRONTEND_LOG="$PROJECT_DIR/frontend.log"
 
 echo -e "${C}╔══════════════════════════════════════════════════════╗${N}"
-echo -e "${C}║     Financial DeepResearch — 关闭开发环境           ║${N}"
+echo -e "${C}║       DeepResearchX — 关闭开发环境                  ║${N}"
 echo -e "${C}╚══════════════════════════════════════════════════════╝${N}"
 echo ""
 

@@ -15,12 +15,17 @@ except Exception:  # noqa: BLE001
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    """FastAPI TestClient with tmp data dirs."""
+    """FastAPI TestClient with tmp data dirs and a stubbed embedding service.
+
+    Stubs out network calls (LLM embeddings) so tests are hermetic and don't
+    require ``LLM_API_KEY`` to be set.
+    """
     if not _HAS_TESTCLIENT:
         pytest.skip("fastapi TestClient / python-multipart not available")
 
     # Patch BEFORE importing main so the routers pick up the patched func.
     import api.documents as _doc_mod
+    import deep_research.rag.embedding as _emb_mod
     import deep_research.rag.pipeline as _pipe_mod
 
     def _make_uploads_dir(sid):
@@ -39,6 +44,22 @@ def client(tmp_path, monkeypatch):
         "_pipeline_cache",
         {},
     )
+
+    # Stub the embedding service to avoid real API calls in tests.
+    _FAKE_DIM = 8
+
+    async def _fake_embed_texts(self, texts):
+        return [[0.1] * _FAKE_DIM for _ in texts]
+
+    async def _fake_embed_query(self, query):
+        return [0.1] * _FAKE_DIM
+
+    async def _fake_close(self):
+        return None
+
+    monkeypatch.setattr(_emb_mod.EmbeddingService, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr(_emb_mod.EmbeddingService, "embed_query", _fake_embed_query)
+    monkeypatch.setattr(_emb_mod.EmbeddingService, "close", _fake_close)
 
     try:
         from main import app
