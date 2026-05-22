@@ -134,6 +134,12 @@ agents:
 output:
   output_dir: ./deep_research/data/output  # 报告输出目录
 
+# 评测配置
+evaluation:
+  enabled: false
+  dataset_path: ./deep_research/evaluation/datasets
+  output_dir: ./deep_research/data/eval_output
+
 # 日志配置
 logging:
   level: INFO  # 性能观测阶段用 INFO，减少 DEBUG 噪音

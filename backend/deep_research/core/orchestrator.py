@@ -313,7 +313,7 @@ class OrchestratorAgent(BaseAgent):
             )
 
         # --- Phase 2: Execute chapters with review ---
-        self._emit("status", {"message": "正在并行分析各章节...", "stage": "chapters", "progress": 30})
+        self._emit("status", {"message": "正在进行深度研究...", "stage": "chapters", "progress": 30})
         logger.info("[Orchestrator] Phase 2: Executing chapters with review")
         t0 = time.perf_counter()
         span_chapters = lf.span(trace_id=trace_id, name="chapter_execution") if lf and trace_id else None

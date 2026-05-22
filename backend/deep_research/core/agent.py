@@ -229,7 +229,7 @@ class LLMClient:
 class ReActAgent(BaseAgent):
     """ReAct-style agent that uses LLM to reason and act with tools."""
 
-    MAX_ITERATIONS = 10
+    MAX_ITERATIONS = 5
 
     def __init__(
         self,

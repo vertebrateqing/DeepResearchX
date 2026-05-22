@@ -91,6 +91,9 @@ A production-grade multi-agent deep research system that generates comprehensive
 - **LLM-Driven Query Enrichment**: Intent clarification uses a single LLM call to produce an enriched research prompt (filling in time range, scope, dimensions). The enriched prompt is shown to the user as an editable card — confirm as-is or refine before research begins
 - **Hybrid Retrieval**: BM25 + vector cosine similarity with RRF fusion for web-scraped content ranking
 - **Any-Domain Research**: General-purpose prompts; not limited to any specific domain
+- **Document Upload & RAG Retrieval**: Upload PDF / Word / text files into per-session Chroma collections. Chunking strategies: recursive, fixed, semantic. Retrieval: vector similarity + BM25 hybrid with RRF fusion
+- **Local Embedding Model**: Supports `BAAI/bge-large-zh-v1.5` (1024-dim, CPU) via sentence-transformers as an offline alternative to cloud APIs
+- **RAG Benchmark Evaluation**: Built-in RAG evaluation framework with precision@k, recall@k, MRR, NDCG metrics. Includes annotated benchmark dataset (Alibaba FY2025 report) for retrieval quality assessment
 - **Benchmark Evaluation**: Built-in RACE metric evaluation via `deep_research_bench` submodule
 
 ---
@@ -101,7 +104,7 @@ A production-grade multi-agent deep research system that generates comprehensive
 |-------|-----------|
 | Backend Framework | FastAPI + uvicorn (async) |
 | LLM | OpenAI-compatible API (Qwen, DeepSeek, GPT-4o, GLM, Kimi…) |
-| Embedding | OpenAI-compatible cloud API (default, e.g. Qwen DashScope) · `BAAI/bge-large-zh-v1.5` via `--extra local-embedding` |
+| Embedding | OpenAI-compatible cloud API (default, e.g. Qwen DashScope) · Local: `BAAI/bge-large-zh-v1.5` via sentence-transformers (1024-dim, CPU) |
 | Vector Store | ChromaDB |
 | Web Search | Tavily / DuckDuckGo |
 | Hybrid Retrieval | BM25 (rank-bm25) + cosine similarity + RRF |
@@ -137,9 +140,25 @@ DeepResearchX/
 │       ├── tools/
 │       │   ├── web_search.py            # Tavily / DuckDuckGo
 │       │   ├── web_scraper.py           # Scrape + hybrid chunk ranking
-│       │   └── llm_call.py              # Direct LLM tool
-│       ├── rag/                         # ChromaDB vector retrieval
+│       │   ├── llm_call.py              # Direct LLM tool
+│       │   └── document_search.py       # Search inside uploaded documents
+│       ├── rag/                         # ChromaDB vector retrieval + BM25 hybrid
+│       │   ├── document_loader.py       # PDF / Word / text parsing
+│       │   ├── chunking.py              # Recursive / fixed / semantic splitters
+│       │   ├── embedding.py             # EmbeddingService (cloud + local)
+│       │   ├── vector_store.py          # ChromaDB wrapper
+│       │   ├── bm25_retriever.py        # BM25 sparse retrieval (jieba)
+│       │   └── pipeline.py              # RAGPipeline: ingest + query + RRF
+│       ├── evaluation/                  # RAG benchmark evaluation
+│       │   ├── models.py                # Pydantic models for test cases & reports
+│       │   ├── metrics.py               # Precision@k, Recall@k, MRR, NDCG
+│       │   ├── rag_evaluator.py         # Benchmark runner (vector / hybrid)
+│       │   ├── reporter.py              # JSON + Markdown report generator
+│       │   └── datasets/                # Annotated benchmark datasets
 │       └── utils/                       # Shared utilities (JSON parser, text utils)
+├── scripts/                             # Evaluation & benchmark scripts
+│   ├── run_rag_eval_local_hybrid.py     # Local embedding + hybrid eval
+│   └── build_alibaba_benchmark.py       # Build benchmark from real PDF
 ├── frontend/
 │   └── src/
 │       ├── App.tsx                      # Multi-turn chat UI
@@ -276,6 +295,26 @@ Query parameters:
 | `complete` | Final report |
 | `error` | Error message |
 
+### `POST /api/documents/upload`
+
+Upload documents (PDF / Word / text) into a per-session Chroma collection.
+
+```
+Form parameters:
+  session_id           string   (required) Session ID for collection isolation
+  files                file[]   (required) One or more files (max 50 MB each, 10 max)
+  chunking_strategy    string   (optional) recursive | fixed | semantic (default: recursive)
+  embedding_model      string   (optional) Override default embedding model
+```
+
+### `GET /api/documents`
+
+List uploaded documents for a session.
+
+### `DELETE /api/documents/{doc_id}`
+
+Delete a document and all its chunks.
+
 ### `POST /api/analyze`
 
 Create analysis task (polling mode).
@@ -351,6 +390,8 @@ All tracing config is deployment-level, controlled via environment variables:
 
 ## Evaluation
 
+### End-to-End Research Quality (RACE)
+
 DeepResearchX includes a benchmark evaluation pipeline using RACE metrics.
 
 ```bash
@@ -368,6 +409,28 @@ python run_drx_bench.py --ids 1,5,10
 ```
 
 Results are written to `deep_research_bench/results/race/DeepResearchX/race_result.txt`.
+
+### RAG Retrieval Quality
+
+Built-in RAG evaluation framework for assessing retrieval performance on uploaded documents.
+
+**Metrics:** Precision@k, Recall@k, MRR, NDCG@k
+
+**Supported modes:**
+- Vector-only retrieval (cosine similarity)
+- Hybrid retrieval (BM25 + vector + RRF fusion)
+
+```bash
+cd backend
+
+# Run with local embedding model (bge-large-zh-v1.5)
+EMBEDDING_PROVIDER=local uv run python scripts/run_rag_eval_local_hybrid.py
+
+# Build benchmark dataset from a real PDF
+uv run python scripts/build_alibaba_benchmark_final.py
+```
+
+**Benchmark dataset:** `deep_research/evaluation/datasets/alibaba_fy2025_benchmark.jsonl` — 10 annotated queries covering exact facts, multi-condition, semantic paraphrase, comprehensive, and negative cases on the Alibaba FY2025 annual report.
 
 ---
 
@@ -470,7 +533,10 @@ DeepResearchX 是一个生产级多智能体深度研究系统，能够针对任
 - **质量审查循环**：每章自动评分（5个维度），基于反馈驱动修订（最多2轮）
 - **实时流式输出**：基于 SSE 的进度流——每个阶段更新、工具调用和部分内容实时推送到前端
 - **LLM 驱动的查询增强**：意图澄清模块通过单次 LLM 调用生成增强版研究提示词（自动补全时间范围、研究深度、分析维度），以可编辑卡片形式展示给用户，用户确认或修改后直接开始研究
-- **混合检索**：BM25 + 向量余弦相似度 + RRF 融合排序，用于网页抓取内容排名
+- **文档上传与 RAG 检索**：支持 PDF / Word / 文本文件上传，按会话隔离存储至 ChromaDB。切分策略：递归、固定长度、语义切分。检索：向量相似度 + BM25 混合检索 + RRF 融合排序
+- **本地嵌入模型**：支持通过 sentence-transformers 加载 `BAAI/bge-large-zh-v1.5`（1024 维，CPU 推理），作为云端 API 的离线替代方案
+- **RAG 基准评测**：内置 RAG 评测框架，支持 Precision@k、Recall@k、MRR、NDCG 指标。包含基于阿里巴巴 2025 财报的标注评测数据集，用于检索质量评估
+- **混合检索**：BM25 + 向量余弦相似度 + RRF 融合排序，用于网页抓取内容与上传文档的混合排名
 - **通用领域研究**：通用提示词设计，不限于特定领域
 - **基准评测**：内置 RACE 指标评测，通过 `deep_research_bench` 子模块实现
 
@@ -482,7 +548,7 @@ DeepResearchX 是一个生产级多智能体深度研究系统，能够针对任
 |------|---------|
 | 后端框架 | FastAPI + uvicorn（异步） |
 | 大语言模型 | OpenAI 兼容 API（通义千问、DeepSeek、GPT-4o、GLM、Kimi…） |
-| 向量嵌入 | OpenAI 兼容云端 API（默认，如通义千问 DashScope）· 可选 `BAAI/bge-large-zh-v1.5`（通过 `--extra local-embedding` 安装） |
+| 向量嵌入 | OpenAI 兼容云端 API（默认，如通义千问 DashScope）· 本地模型：`BAAI/bge-large-zh-v1.5` 通过 sentence-transformers 加载（1024 维，CPU 推理） |
 | 向量数据库 | ChromaDB |
 | 网络搜索 | Tavily / DuckDuckGo |
 | 混合检索 | BM25 (rank-bm25) + 余弦相似度 + RRF |
@@ -518,9 +584,25 @@ DeepResearchX/
 │       ├── tools/
 │       │   ├── web_search.py            # Tavily / DuckDuckGo
 │       │   ├── web_scraper.py           # 网页抓取 + 混合排序
-│       │   └── llm_call.py              # 直接 LLM 调用工具
-│       ├── rag/                         # ChromaDB 向量检索
+│       │   ├── llm_call.py              # 直接 LLM 调用工具
+│       │   └── document_search.py       # 上传文档内检索
+│       ├── rag/                         # ChromaDB 向量检索 + BM25 混合检索
+│       │   ├── document_loader.py       # PDF / Word / 文本解析
+│       │   ├── chunking.py              # 递归 / 固定长度 / 语义切分器
+│       │   ├── embedding.py             # EmbeddingService（云端 + 本地）
+│       │   ├── vector_store.py          # ChromaDB 封装
+│       │   ├── bm25_retriever.py        # BM25 稀疏检索（jieba 分词）
+│       │   └── pipeline.py              # RAGPipeline：导入 + 查询 + RRF
+│       ├── evaluation/                  # RAG 基准评测
+│       │   ├── models.py                # 评测数据模型
+│       │   ├── metrics.py               # Precision@k, Recall@k, MRR, NDCG
+│       │   ├── rag_evaluator.py         # 评测执行器（向量 / 混合）
+│       │   ├── reporter.py              # JSON + Markdown 报告生成器
+│       │   └── datasets/                # 标注评测数据集
 │       └── utils/                       # 共享工具（JSON 解析、文本处理）
+├── scripts/                             # 评测与数据集构建脚本
+│   ├── run_rag_eval_local_hybrid.py     # 本地 embedding + 混合评测
+│   └── build_alibaba_benchmark.py       # 从真实 PDF 构建评测数据集
 ├── frontend/
 │   └── src/
 │       ├── App.tsx                      # 多轮对话 UI
@@ -656,6 +738,26 @@ docker-compose up --build
 | `complete` | 最终报告完成 |
 | `error` | 错误信息 |
 
+### `POST /api/documents/upload`
+
+上传文档（PDF / Word / 文本）到按会话隔离的 Chroma collection。
+
+```
+表单参数：
+  session_id           string   （必填）会话 ID，用于 collection 隔离
+  files                file[]   （必填）一个或多个文件（单个最大 50 MB，最多 10 个）
+  chunking_strategy    string   （可选）recursive | fixed | semantic（默认 recursive）
+  embedding_model      string   （可选）覆盖默认嵌入模型
+```
+
+### `GET /api/documents`
+
+列出某会话下已上传的文档。
+
+### `DELETE /api/documents/{doc_id}`
+
+删除文档及其所有 chunks。
+
 Swagger UI：`http://localhost:8000/docs`
 
 ---
@@ -723,6 +825,8 @@ LANGFUSE_HOST=http://localhost:3000
 
 ## 基准评测
 
+### 端到端研究质量（RACE）
+
 DeepResearchX 内置基准评测流水线，使用 RACE 指标。
 
 ```bash
@@ -740,6 +844,28 @@ python run_drx_bench.py --ids 1,5,10
 ```
 
 评测结果保存至 `deep_research_bench/results/race/DeepResearchX/race_result.txt`。
+
+### RAG 检索质量
+
+内置 RAG 评测框架，用于评估上传文档的检索性能。
+
+**指标：** Precision@k、Recall@k、MRR、NDCG@k
+
+**支持模式：**
+- 纯向量检索（余弦相似度）
+- 混合检索（BM25 + 向量 + RRF 融合）
+
+```bash
+cd backend
+
+# 使用本地嵌入模型运行评测（bge-large-zh-v1.5）
+EMBEDDING_PROVIDER=local uv run python scripts/run_rag_eval_local_hybrid.py
+
+# 从真实 PDF 构建评测数据集
+uv run python scripts/build_alibaba_benchmark_final.py
+```
+
+**评测数据集：** `deep_research/evaluation/datasets/alibaba_fy2025_benchmark.jsonl` — 基于阿里巴巴 2025 财报的 10 条标注查询，覆盖精确事实、多条件、语义改写、综合和负例等场景。
 
 ---
 
