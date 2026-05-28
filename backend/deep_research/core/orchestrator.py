@@ -154,7 +154,15 @@ class OrchestratorAgent(BaseAgent):
     @property
     def session_dir(self) -> Path:
         """Directory for this session's working files."""
-        return Path("./deep_research/data/sessions") / self.memory.session_id
+        sid = self.memory.session_id
+        if any(c in sid for c in "/\\.."):
+            raise ValueError(f"Invalid session_id: {sid}")
+        base = Path("./deep_research/data/sessions").resolve()
+        path = base / sid
+        # Defensive: ensure resolved path stays within base directory
+        if not str(path.resolve()).startswith(str(base)):
+            raise ValueError(f"Session directory escape detected: {path}")
+        return path
 
     async def run(
         self,

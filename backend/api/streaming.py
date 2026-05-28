@@ -29,6 +29,19 @@ logger = logging.getLogger(__name__)
 _task_store: dict[str, dict] = {}
 
 
+def _validate_session_id(session_id: Optional[str]) -> Optional[str]:
+    """Validate session_id to prevent path traversal attacks.
+
+    Returns the sanitized session_id or None if invalid.
+    """
+    if not session_id:
+        return None
+    sid = session_id.strip()
+    if any(c in sid for c in "/\\.."):
+        return None
+    return sid
+
+
 async def analyze_stream(
     query: str,
     model: Optional[str] = None,
@@ -53,6 +66,13 @@ async def analyze_stream(
     返回：
         AsyncGenerator，每次 yield 一条 SSE 格式的字符串
     """
+    # Validate session_id to prevent path traversal
+    validated_session = _validate_session_id(session_id)
+    if session_id and validated_session is None:
+        yield _sse_format("error", {"message": "Invalid session_id"})
+        return
+    session_id = validated_session
+
     task_id = str(uuid.uuid4())
 
     # 记录任务到内存存储
