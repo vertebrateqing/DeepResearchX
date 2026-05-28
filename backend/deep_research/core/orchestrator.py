@@ -146,7 +146,7 @@ class OrchestratorAgent(BaseAgent):
             try:
                 self.progress_callback(event_type, payload)
             except Exception:
-                pass
+                logger.exception("Progress callback failed")
 
     def _generate_session_id(self) -> str:
         return f"sess_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
