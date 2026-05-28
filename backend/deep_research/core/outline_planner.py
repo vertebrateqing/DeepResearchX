@@ -17,7 +17,7 @@ from typing import Any
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient, ReActAgent
 from deep_research.tools.web_search import WebSearchTool
-from deep_research.utils import extract_json_from_markdown
+from deep_research.utils import RobustJSONParser, extract_json_from_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -230,44 +230,6 @@ class OutlineResearchAgent(ReActAgent):
         except Exception as e:
             logger.warning(f"[OutlineResearchAgent] Research error: {e}")
             return ""
-
-
-def _fix_json_string_escapes(text: str) -> str:
-    """Fix unescaped control characters inside JSON string literals.
-
-    LLMs sometimes emit literal newlines, tabs, or other control chars inside
-    JSON string values, which makes json.loads fail with 'Expecting delimiter'.
-    This function replaces bare control characters inside string literals with
-    their proper JSON escape sequences.
-    """
-    result = []
-    in_string = False
-    escape_next = False
-    i = 0
-    while i < len(text):
-        ch = text[i]
-        if escape_next:
-            result.append(ch)
-            escape_next = False
-        elif ch == '\\' and in_string:
-            result.append(ch)
-            escape_next = True
-        elif ch == '"':
-            result.append(ch)
-            in_string = not in_string
-        elif in_string and ch == '\n':
-            result.append('\\n')
-        elif in_string and ch == '\r':
-            result.append('\\r')
-        elif in_string and ch == '\t':
-            result.append('\\t')
-        elif in_string and ord(ch) < 0x20:
-            # Other control characters
-            result.append(f'\\u{ord(ch):04x}')
-        else:
-            result.append(ch)
-        i += 1
-    return ''.join(result)
 
 
 class OutlinePlanner:
@@ -537,44 +499,7 @@ class OutlinePlanner:
 
     def _parse_outline(self, content: str) -> ReportOutline | None:
         """Parse LLM response into ReportOutline."""
-        import re
-
-        # Step 0: Strip <think>...</think> reasoning block (chain-of-thought models)
-        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
-
-        # Step 1: Extract from markdown code block
-        content = extract_json_from_markdown(content).lstrip("\ufeff")
-
-        # Step 2: Replace Chinese quotation marks that break JSON
-        content = content.replace("\u201c", '"').replace("\u201d", '"')
-        content = content.replace("\u2018", "'").replace("\u2019", "'")
-
-        # Step 3: Try direct parse
-        data = None
-        try:
-            data = json.loads(content)
-        except json.JSONDecodeError as e:
-            logger.warning(f"[OutlinePlanner] Direct JSON parse failed: {e}, trying repair...")
-            logger.warning(f"[OutlinePlanner] Failing content around error (char {e.pos}): {content[max(0,e.pos-80):e.pos+80]!r}")
-
-            # Step 4: Fix unescaped control characters inside JSON strings.
-            # LLMs sometimes emit literal newlines/tabs inside string values.
-            repaired = _fix_json_string_escapes(content)
-
-            try:
-                data = json.loads(repaired)
-            except json.JSONDecodeError:
-                # Step 5: Extract outermost {...} and retry on repaired content
-                match = re.search(r'\{[\s\S]*\}', repaired)
-                if match:
-                    try:
-                        data = json.loads(match.group(0))
-                    except json.JSONDecodeError as e2:
-                        logger.warning(f"[OutlinePlanner] Failed to parse outline JSON: {e2}")
-                        return None
-                else:
-                    logger.warning(f"[OutlinePlanner] Failed to parse outline JSON after repair: {e}")
-                    return None
+        data = RobustJSONParser.parse(content)
 
         if data is None:
             return None

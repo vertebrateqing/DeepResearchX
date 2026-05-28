@@ -7,8 +7,8 @@ from deep_research.core.outline_planner import (
     ChapterOutline,
     OutlinePlanner,
     ReportOutline,
-    _fix_json_string_escapes,
 )
+from deep_research.utils.json_parser import _fix_json_string_escapes
 
 
 class TestFixJsonStringEscapes:
