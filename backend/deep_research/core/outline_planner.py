@@ -9,7 +9,6 @@ dependencies, and key questions.
 import json
 import logging
 import time
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -241,8 +240,6 @@ def _fix_json_string_escapes(text: str) -> str:
     This function replaces bare control characters inside string literals with
     their proper JSON escape sequences.
     """
-    import re
-
     result = []
     in_string = False
     escape_next = False
