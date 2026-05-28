@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from deep_research.config.prompt_loader import get_prompt
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient, ReActAgent
 from deep_research.tools.web_search import WebSearchTool
@@ -103,95 +104,9 @@ class ReportOutline:
 
 
 
-RESEARCH_SYSTEM_PROMPT = """你是一位严谨的研究前期调研员，负责在正式规划报告前收集和验证关键信息。
-
-你的核心任务：
-1. 通过搜索了解研究主题的真实信息 landscape
-2. 识别可信的数据来源、权威机构、行业报告
-3. 验证可能过时的假设（如"某政策是否仍在执行"、"某报告是否已发布"）
-4. 发现真实的研究维度和分析框架
-5. 标注无法验证的假设，供后续规划阶段参考
-
-搜索策略：
-- 先进行 2-3 次广泛搜索，了解主题整体概况和最新进展
-- 针对发现的关键事实进行 1-2 次验证搜索
-- 如发现数据缺口或时效性问题，继续深入搜索
-- 每次搜索后总结关键发现，决定是否需要进一步搜索
-
-输出格式（Markdown）：
-```
-# 信息探索笔记
-
-## 关键发现
-- [发现1]（来源：xxx）
-- [发现2]（来源：xxx）
-
-## 可信数据来源
-- [来源1]: 描述
-- [来源2]: 描述
-
-## 建议的研究维度
-1. [维度1]: 说明
-2. [维度2]: 说明
-
-## 已验证的关键事实
-- [事实1]: 验证方式和来源
-- [事实2]: 验证方式和来源
-
-## 无法验证的假设（风险标注）
-- [假设1]: 为什么无法验证，对报告的影响
-
-## 注意事项与数据缺口
-- [注意1]
-```
-
-请基于搜索结果输出完整的信息探索笔记。如果信息足够充分，直接输出笔记即可，无需继续搜索。"""
-
-
-OUTLINE_SYSTEM_PROMPT = """你是一位资深研究报告规划专家。你的职责是根据用户的研究需求，设计一份专业、结构化的深度分析报告大纲。
-
-在设计章节前，请先在脑中完成以下分析：
-① 用户的核心研究目的是什么（决策支持/知识获取/对比分析/趋势预测）？
-② 回答这个问题需要哪些核心维度的信息？
-③ 哪些章节负责收集事实数据，哪些章节需要在数据基础上进行推理分析，哪些章节负责综合结论？
-④ 章节间是否存在推理依赖链（例如：必须先有市场规模数据，才能做竞争格局分析）？
-
-完成上述思考后，直接输出 JSON。
-
-设计规则：
-1. 章节标题必须具体，包含研究对象和具体维度，禁止使用宽泛标题
-   - ❌ 错误示例："市场分析"、"行业概况"、"竞争格局"
-   - ✅ 正确示例："中国新能源汽车2024年市场规模与增长驱动因素"、"比亚迪vs特斯拉核心技术路线对比"
-2. 每个章节有明确的 objective（本章要得出什么结论）和 key_questions（必须回答的具体问题）
-3. research_type 区分章节类型：
-   - "data_collection"：收集事实、数据、现状（无依赖，可并行）
-   - "analysis"：在数据基础上推理分析（依赖数据收集章节）
-   - "conclusion"：综合多章结论（依赖分析章节）
-4. depends_on 填写本章依赖的 chapter_id 列表，无依赖时填 []
-5. suggested_tools 从 [tavily_search, web_scraper] 中选择
-6. word_count 根据章节复杂度自行判断，单章上限 2000 字
-7. 章节数量根据研究复杂度自行判断，上限 12 章
-8. 当前真实日期必须被考虑，确保分析具有时效性
-
-输出格式（严格JSON，不要任何解释文字）：
-{
-  "title": "报告标题",
-  "research_purpose": "用户研究目的的一句话说明",
-  "executive_summary_points": ["要点1", "要点2"],
-  "strategy": "整体研究策略说明，包括章节依赖链的设计逻辑",
-  "chapters": [
-    {
-      "chapter_id": "c1",
-      "title": "具体的章节标题（含研究对象+维度）",
-      "objective": "本章需要得出的结论或收集的信息",
-      "research_type": "data_collection",
-      "suggested_tools": ["tavily_search"],
-      "word_count": 800,
-      "key_questions": ["具体问题1", "具体问题2"],
-      "depends_on": []
-    }
-  ]
-}"""
+# Load prompts from external config; fallback to built-in defaults if unavailable.
+RESEARCH_SYSTEM_PROMPT = get_prompt("outline_planner", "research")
+OUTLINE_SYSTEM_PROMPT = get_prompt("outline_planner", "outline")
 
 
 class OutlineResearchAgent(ReActAgent):
