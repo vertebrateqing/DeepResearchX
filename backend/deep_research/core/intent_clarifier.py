@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+from deep_research.config.prompt_loader import get_prompt
 from deep_research.core.agent import LLMClient
 from deep_research.utils import extract_json_from_markdown
 
@@ -71,17 +72,9 @@ class ClarificationResult:
     rounds_completed: int = 0
 
 
-_ANALYZE_SYSTEM_PROMPT = (
-    "你是一个专业的研究顾问，负责将用户的原始请求转化为一份"
-    "结构化、清晰的研究计划简报（Research Plan Brief）。"
-    "你只在信息真正模糊且无法合理推断时才向用户提问，"
-    "绝大多数情况下应直接补全信息并生成计划。"
-)
+_ANALYZE_SYSTEM_PROMPT = get_prompt("intent_clarifier", "analyze")
 
-_INCORPORATE_SYSTEM_PROMPT = (
-    "你是一个专业的研究顾问，负责将用户补充的信息融入研究计划，"
-    "生成一份结构化、清晰的研究计划简报。"
-)
+_INCORPORATE_SYSTEM_PROMPT = get_prompt("intent_clarifier", "incorporate")
 
 
 class IntentClarifier:

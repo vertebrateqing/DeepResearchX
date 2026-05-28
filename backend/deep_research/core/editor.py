@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from deep_research.config.prompt_loader import get_prompt
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient
 from deep_research.utils import extract_json_from_markdown, unwrap_markdown
@@ -90,28 +91,7 @@ class EditResult:
         }
 
 
-EDITOR_SYSTEM_PROMPT = """你是一位资深研究报告编辑。你的职责是对完整的分析报告进行最终润色和质量把控。
-
-评估维度（每项 1-10 分，10分为最佳）：
-1. grammar_style (语法与表达): 语言是否专业、流畅？是否有语病或冗余？术语使用是否准确？
-2. factual_consistency (事实一致性): 全文数据是否前后一致？有无自相矛盾？引用是否准确？
-3. completeness (报告完整度): 是否覆盖了应有内容？有无遗漏重要章节？结构是否完整？
-4. formatting (格式统一): 标题层级、引用格式、表格样式是否统一？Markdown 格式是否正确？
-
-通过标准：总分 >= 28 且 单项 >= 6
-
-输出格式（严格JSON，不要任何解释文字）：
-{
-  "passed": true/false,
-  "scores": {
-    "grammar_style": 8,
-    "factual_consistency": 9,
-    "completeness": 8,
-    "formatting": 7
-  },
-  "revision_suggestions": ["建议1", "建议2"],
-  "critical_issues": ["必须修正的问题1"]
-}"""
+EDITOR_SYSTEM_PROMPT = get_prompt("editor", "system")
 
 
 class EditorAgent:

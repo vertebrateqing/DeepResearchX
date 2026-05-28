@@ -24,6 +24,24 @@ _FALLBACK_PROMPTS: dict[str, Any] = {
         "research": "You are a research assistant. Gather information about the user's topic and summarize findings.",
         "outline": "You are a report planning expert. Design a structured report outline in JSON format.",
     },
+    "reviser": {
+        "system": "You are a quality review expert. Evaluate report chapters across 5 dimensions (1-10 scale) and output JSON with passed, scores, feedback, and action_required.",
+    },
+    "editor": {
+        "system": "You are a senior editor. Evaluate complete reports across 4 dimensions (1-10 scale) and output JSON with passed, scores, revision_suggestions, and critical_issues.",
+    },
+    "chapter_worker": {
+        "chapter": "You are a professional research analyst. Write a complete report chapter in Markdown based on the provided outline requirements.",
+        "react_header": "You are a professional research analyst revising a report chapter.",
+        "react_body": "Revise the chapter based on feedback. Use Markdown format. Output complete chapter text starting with ##.",
+    },
+    "integration": {
+        "system": "You are a senior report integration expert. Merge multiple chapters into a coherent, complete analysis report in Markdown.",
+    },
+    "intent_clarifier": {
+        "analyze": "You are a professional research consultant. Transform the user's raw request into a structured research plan brief.",
+        "incorporate": "You are a professional research consultant. Incorporate user clarifications into a structured research plan brief.",
+    },
 }
 
 

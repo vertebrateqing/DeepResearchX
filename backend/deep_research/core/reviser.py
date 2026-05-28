@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from deep_research.config.prompt_loader import get_prompt
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient
 from deep_research.core.outline_planner import ChapterOutline
@@ -41,32 +42,7 @@ class ReviewResult:
         }
 
 
-REVISER_SYSTEM_PROMPT = """你是一位资深研究报告质量评审专家。你的职责是审查章节是否真正达成了其研究目的。
-
-评审时，首先判断关键问题是否都得到了实质性回答，再评估其他维度。
-
-评审维度（每项 1-10 分，10分为最佳）：
-1. objective_achieved (目标达成度): 章节是否真正回答了关键问题？研究目的是否达成？
-2. research_depth (研究深度): 分析是否有深度？是否有独到洞察和证据支撑？
-3. data_reliability (信息可靠性): 信息是否有明确来源？关键论据是否准确？
-4. rigor (严谨程度): 逻辑是否自洽？论证是否充分？结论是否有支撑？
-5. formatting (格式规范): Markdown 格式是否正确？标题层级是否合理？
-
-通过标准：总分 >= 35 且 单项 >= 6 且 objective_achieved >= 7
-
-输出格式（严格JSON，不要任何解释文字）：
-{
-  "passed": true/false,
-  "scores": {
-    "objective_achieved": 8,
-    "research_depth": 7,
-    "data_reliability": 7,
-    "rigor": 7,
-    "formatting": 8
-  },
-  "feedback": "具体评审意见，重点说明关键问题是否被回答，未通过时详细说明需要改进的地方。",
-  "action_required": "revise 或 accept"
-}"""
+REVISER_SYSTEM_PROMPT = get_prompt("reviser", "system")
 
 
 def _build_reviser_user_prompt(outline: ChapterOutline, chapter_text: str, word_count: int) -> str:

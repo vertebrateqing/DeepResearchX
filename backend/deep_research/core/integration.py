@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from deep_research.config.prompt_loader import get_prompt
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient
 from deep_research.core.intent_clarifier import ResearchPlanBrief
@@ -18,21 +19,7 @@ from deep_research.utils import unwrap_markdown
 logger = logging.getLogger(__name__)
 
 
-INTEGRATION_SYSTEM_PROMPT = """你是一位资深报告整合专家。你将收到一份报告标题、研究背景与目标、研究方向参考和多个已完成的章节文件。
-你的任务是将这些章节整合为一份连贯、完整的分析报告。
-
-整合要求：
-1. 按章节顺序排列，为章节之间添加过渡段落，确保逻辑流畅
-2. 消除跨章节的重复内容（合并或删减）
-3. 统一全文的术语、格式和引用风格
-4. 执行摘要必须基于各章节实际研究内容提炼核心发现，同时呼应研究背景与目标
-5. 综合结论必须紧扣研究目标，回答用户最初提出的问题
-6. 在所有章节之后添加"综合结论"章节：跨章节综合分析，给出最终判断和建议，400-600 字
-7. 在综合结论之后添加"参考来源"章节：整理各章节引用的信息来源
-8. 保持各章节的完整内容，不要过度压缩
-9. 报告开头应包含：标题、生成日期、执行摘要
-
-注意：你是从零开始整合，没有历史对话上下文。所有信息来自提供的章节文件和研究背景。"""
+INTEGRATION_SYSTEM_PROMPT = get_prompt("integration", "system")
 
 
 class IntegrationAgent:

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+from deep_research.config.prompt_loader import get_prompt
 from deep_research.config.settings import get_settings
 from deep_research.core.agent import LLMClient, ReActAgent
 from deep_research.core.base import BaseSkill, BaseTool
@@ -25,22 +26,10 @@ from deep_research.utils import unwrap_markdown
 logger = logging.getLogger(__name__)
 
 
-# Static system prompts — chapter-specific details go into user prompt for KV cache efficiency
-CHAPTER_SYSTEM_PROMPT = """你是一位专业的研究分析师，负责撰写分析报告的独立章节。
-
-【写作要求】
-1. 基于提供的章节要求撰写完整章节，不要泛泛而谈
-2. 内容必须直接回答关键问题，提供数据支撑的深度分析
-3. 所有数据必须标注来源，使用 [来源: 标题 / URL] 格式，URL 从资料中获取；若无 URL 则使用 [来源: 标题]
-4. 承认信息缺口和不确定性，不要编造数据
-5. 使用 Markdown 格式，包含必要的小标题、列表、表格
-6. 最终输出必须是完整的 Markdown 文本（不要包装在代码块中）
-7. 内容要有深度，提供数据支撑的分析，而不是简单的信息罗列
-
-【输出格式】
-直接输出 Markdown 格式的章节正文。不需要 JSON 格式。章节正文应以二级标题（##）开头。"""
-
-REACT_SYSTEM_PROMPT_HEADER = """你是一位专业的研究分析师，负责修订分析报告的独立章节。"""
+# Static system prompts — loaded from external config; fallback to minimal defaults.
+CHAPTER_SYSTEM_PROMPT = get_prompt("chapter_worker", "chapter")
+REACT_SYSTEM_PROMPT_HEADER = get_prompt("chapter_worker", "react_header")
+REACT_SYSTEM_PROMPT_BODY = get_prompt("chapter_worker", "react_body")
 
 # Per-tool guidance fragments — only inserted when the matching tool is wired
 # into the worker. Keeps the prompt in lockstep with the actual toolset so the
@@ -50,18 +39,6 @@ _REACT_TOOL_HINTS: dict[str, str] = {
     "tavily_search": "- tavily_search: 搜索互联网获取最新资讯、行业动态、相关信息",
     "web_scraper": "- web_scraper: 抓取搜索结果网页全文，获取深度内容",
 }
-
-REACT_SYSTEM_PROMPT_BODY = """【写作要求】
-1. 针对评审反馈进行修改，基于工具收集的额外信息补充内容
-2. 内容必须直接回答关键问题，不要泛泛而谈
-3. 所有数据必须标注来源；引用上传文档时用 [来源: 文件名]，引用网页时用 [来源: 标题 / URL]
-4. 承认信息缺口和不确定性，不要编造数据
-5. 使用 Markdown 格式，包含必要的小标题、列表、表格
-6. 最终输出必须是完整的 Markdown 文本（不要包装在代码块中）
-7. 内容要有深度，提供数据支撑的分析，而不是简单的信息罗列
-
-【输出格式】
-直接输出 Markdown 格式的章节正文。不需要 JSON 格式。章节正文应以二级标题（##）开头。"""
 
 
 def _build_react_system_prompt(tools: list[BaseTool]) -> str:
