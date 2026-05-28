@@ -128,7 +128,10 @@ class WebSearchTool(BaseTool):
                         f"from {len(scraped.get('pages', []))} pages, "
                         f"returned {len(scraped.get('chunks', []))} top-k"
                     )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
+                    # Web scraper may raise various exceptions (httpx errors,
+                    # parsing errors, timeout); catch broadly to prevent one
+                    # failing URL from aborting the entire search.
                     logger.warning(f"[WebSearch] URL scraping failed: {e}")
                     result["scraped_chunks"] = []
                     result["scraped_total_chunks"] = 0
@@ -221,7 +224,7 @@ class WebSearchTool(BaseTool):
                 "results": results,
                 "total_results": len(results),
             }
-        except Exception as e:
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
             logger.error(f"Tavily search failed: {e}")
             # Fallback to DuckDuckGo
             return await self._search_duckduckgo(query, max_results)
@@ -253,7 +256,8 @@ class WebSearchTool(BaseTool):
                 "results": results,
                 "total_results": len(results),
             }
-        except Exception as e:
+        except (ImportError, Exception) as e:  # noqa: BLE001
+            # DDGS may raise various exceptions (network, rate limit, etc.)
             logger.error(f"DuckDuckGo search failed: {e}")
             return {
                 "query": query,

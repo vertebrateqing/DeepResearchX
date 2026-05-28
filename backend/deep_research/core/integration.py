@@ -146,7 +146,7 @@ class IntegrationAgent:
             if not draft_text.startswith("# "):
                 draft_text = f"# {title}\n\n{draft_text}"
 
-        except Exception as e:
+        except (json.JSONDecodeError, IndexError, KeyError) as e:
             logger.error(f"[Integration] LLM integration failed: {e}, using fallback concatenation")
             # Fallback: simple concatenation
             lines = [f"# {title}", "", "## 执行摘要", ""]

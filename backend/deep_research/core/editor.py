@@ -192,8 +192,8 @@ class EditorAgent:
             )
             return result
 
-        except Exception as e:
-            logger.error(f"[Editor] Review failed: {e}")
+        except (json.JSONDecodeError, IndexError, KeyError) as e:
+            logger.error(f"[Editor] Review parsing failed: {e}")
             return EditResult(
                 passed=True,
                 scores={"grammar_style": 7, "factual_consistency": 7, "completeness": 7, "formatting": 7},
@@ -304,7 +304,8 @@ class EditorAgent:
             try:
                 with open(diag_path, "w", encoding="utf-8") as f:
                     json.dump(diag, f, ensure_ascii=False, indent=2)
-            except Exception:
+            except OSError:
+                # Best-effort diagnostic write; ignore failures
                 pass
             return draft_file
 
@@ -332,7 +333,8 @@ class EditorAgent:
                 try:
                     with open(edits_path, "r", encoding="utf-8") as f:
                         edits_data = json.load(f)
-                except Exception:
+                except (json.JSONDecodeError, OSError):
+                    # Previous edits file missing or corrupt; start fresh
                     pass
             edits_data["edit_rounds"].append(result.to_dict())
             with open(edits_path, "w", encoding="utf-8") as f:

@@ -98,8 +98,8 @@ async def analyze_stream(
             """Orchestrator 回调，把进度事件放入队列。"""
             try:
                 progress_queue.put_nowait({"event": event_type, "data": payload})
-            except Exception:
-                pass
+            except asyncio.QueueFull:
+                logger.warning("Progress queue full, dropping event")
 
         # 创建原有 Orchestrator 实例，传入进度回调
         # 如果传了 session_id，OrchestratorAgent 会自动加载该会话的上下文

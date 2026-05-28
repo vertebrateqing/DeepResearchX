@@ -271,7 +271,7 @@ class ReActAgent(BaseAgent):
                     tools=tools_schema if tools_schema else None,
                     model=self.model,
                 )
-            except Exception as e:
+            except httpx.HTTPError as e:
                 logger.error(f"LLM call failed: {e}")
                 error_msg = AgentMessage.create_error(
                     sender=self.name,
@@ -316,11 +316,15 @@ class ReActAgent(BaseAgent):
                         logger.info(f"Agent {self.name} tool {tool_name} executed")
                         try:
                             result_preview = str(result)[:200]
-                        except Exception:
+                        except (TypeError, ValueError):
                             result_preview = "<unable to preview>"
                         logger.debug(f"Agent {self.name} tool {tool_name} result: {result_preview}")
                         run_ctx.add_tool_call(tool_name, tool_args, result)
                     except Exception as e:
+                        # Tools may raise arbitrary exceptions from external APIs;
+                        # we catch broadly here to prevent one failing tool from
+                        # crashing the entire agent loop, but we always log the
+                        # full traceback for debugging.
                         logger.error(f"Tool {tool_name} failed: {e}")
                         logger.error(f"Tool {tool_name} traceback: {traceback.format_exc()}")
                         result = {"error": str(e)}
@@ -422,7 +426,7 @@ class SimpleAgent(BaseAgent):
         try:
             response = await self.llm.chat(messages=messages, model=self.model)
             content = response["choices"][0]["message"].get("content", "")
-        except Exception as e:
+        except httpx.HTTPError as e:
             return AgentMessage.create_error(
                 sender=self.name,
                 receiver=context.parent_agent if context else "user",

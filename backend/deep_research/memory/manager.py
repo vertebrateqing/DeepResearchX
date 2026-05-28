@@ -107,7 +107,10 @@ class MemoryManager:
             try:
                 await self.long_term_store.add_finding(finding)
                 synced += 1
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
+                # Long-term store implementations may raise arbitrary exceptions;
+                # we catch broadly to prevent one failing finding from aborting
+                # the entire sync batch.
                 failed += 1
                 logger.warning(f"Failed to sync finding {finding.finding_id}: {e}")
 

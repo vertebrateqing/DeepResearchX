@@ -32,7 +32,7 @@ def get_langfuse() -> "Langfuse | None":
     try:
         from deep_research.config.settings import get_settings
         cfg = get_settings().langfuse
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
 
     if not cfg.enabled:
@@ -48,7 +48,7 @@ def get_langfuse() -> "Langfuse | None":
                 flush_at=cfg.flush_at,
                 flush_interval=cfg.flush_interval,
             )
-        except Exception:
+        except (ImportError, ModuleNotFoundError, ValueError):
             return None
 
     return _client

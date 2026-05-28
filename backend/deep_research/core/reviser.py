@@ -167,8 +167,8 @@ class ReviserAgent:
             )
             return result
 
-        except Exception as e:
-            logger.error(f"[Reviser] Review failed for {chapter_outline.chapter_id}: {e}")
+        except (json.JSONDecodeError, IndexError, KeyError) as e:
+            logger.error(f"[Reviser] Review parsing failed for {chapter_outline.chapter_id}: {e}")
             # Fallback: auto-pass to avoid blocking
             return ReviewResult(
                 passed=True,

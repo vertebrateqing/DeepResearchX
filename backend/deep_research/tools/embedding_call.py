@@ -132,14 +132,14 @@ class EmbeddingTool(BaseTool):
                         try:
                             import torch
                             device = "cuda" if torch.cuda.is_available() else "cpu"
-                        except Exception:
+                        except ImportError:
                             device = "cpu"
 
                     logger.info(f"[Embedding] Loading local model: {model_path} on {device}")
                     t0 = time.perf_counter()
                     try:
                         _local_models[model_path] = SentenceTransformer(model_path, device=device)
-                    except Exception as e:
+                    except (ImportError, OSError, ValueError) as e:
                         logger.warning(f"[Embedding] Failed to load model on {device}: {e}, falling back to CPU")
                         _local_models[model_path] = SentenceTransformer(model_path, device="cpu")
                     logger.info(f"[Embedding] Model loaded in {time.perf_counter() - t0:.2f}s")

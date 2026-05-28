@@ -23,7 +23,8 @@ def duplicate_chunk_rate(pipeline: RAGPipeline) -> float:
     try:
         collection = pipeline.vector_store.collection
         result = collection.get(include=["documents"])
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
+        # ChromaDB collection access may raise various internal errors
         logger.warning(f"[IndexHealth] failed to read collection: {e}")
         return 0.0
 
@@ -53,7 +54,7 @@ def metadata_completeness(pipeline: RAGPipeline) -> dict[str, float]:
     try:
         collection = pipeline.vector_store.collection
         result = collection.get(include=["metadatas"])
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"[IndexHealth] failed to read collection: {e}")
         return {f: 0.0 for f in _REQUIRED_METADATA_FIELDS}
 

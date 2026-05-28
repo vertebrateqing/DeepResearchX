@@ -212,7 +212,8 @@ def extract_text_from_pdf(file_path: str | Path) -> str:
 
             if texts:
                 return "\n\n".join(texts)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
+            # pdfplumber may raise various PDF parsing errors
             logger.debug(f"pdfplumber extraction failed: {e}")
     else:
         logger.debug("pdfplumber not available, skipping")
@@ -230,7 +231,8 @@ def extract_text_from_pdf(file_path: str | Path) -> str:
                     texts.append(text.strip())
 
             return "\n\n".join(texts) if texts else ""
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
+            # pypdf may raise various PDF parsing errors
             logger.warning(f"pypdf extraction failed for {file_path}: {e}")
             return ""
     else:
@@ -353,7 +355,8 @@ def _tokenize(text: str) -> list[str]:
     try:
         from langdetect import detect
         lang = detect(text[:500])  # sample first 500 chars for speed
-    except Exception:
+    except (ImportError, Exception):
+        # langdetect not installed or detection failed
         lang = "zh"
 
     if lang.startswith("zh"):
@@ -568,7 +571,7 @@ class WebScraperTool(BaseTool):
                 if normalized not in seen:
                     seen.add(normalized)
                     result.append(url)  # Keep original URL for fetching
-            except Exception:
+            except ValueError:
                 # Malformed URL, keep as-is
                 if url not in seen:
                     seen.add(url)
@@ -599,7 +602,10 @@ class WebScraperTool(BaseTool):
                 except asyncio.TimeoutError:
                     logger.warning(f"[WebScraper] Timeout fetching {url} after {per_url_timeout}s")
                     return None
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
+                    # _fetch_page may raise various exceptions (httpx errors,
+                    # parsing errors, encoding issues); catch broadly to prevent
+                    # one bad URL from crashing the entire batch.
                     logger.warning(f"[WebScraper] Failed to fetch {url}: {e}")
                     return None
 
@@ -675,7 +681,7 @@ class WebScraperTool(BaseTool):
                     content_type="pdf",
                     metadata={"skipped": True, "reason": "file_too_large", "content_length": int(content_length)},
                 )
-        except Exception:
+        except httpx.HTTPError:
             # HEAD may not be supported, proceed with GET
             pass
 
